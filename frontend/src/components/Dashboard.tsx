@@ -100,8 +100,9 @@ const Dashboard: React.FC = () => {
           <h3 className="text-red-100 font-bold text-lg">Error Loading Lead</h3>
           <p className="text-red-200 mt-1">{error || 'Lead record not found in system.'}</p>
           <button
+            type="button"
             onClick={() => navigate('/leads')}
-            className="mt-4 px-4 py-2 bg-red-800/60 hover:bg-red-700 text-white rounded-lg text-sm transition"
+            className="mt-4 px-4 py-2 bg-red-800/60 hover:bg-red-700 text-white rounded-lg text-sm transition cursor-pointer active:scale-95"
           >
             Return to All Leads
           </button>
@@ -259,7 +260,7 @@ const Dashboard: React.FC = () => {
             <button
               type="button"
               onClick={startEditing}
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-3.5 py-2 text-sm font-medium text-white transition border border-slate-600"
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-3.5 py-2 text-sm font-medium text-white transition border border-slate-600 cursor-pointer active:scale-95"
             >
               <Edit3 size={15} /> Edit Lead Context
             </button>
@@ -268,7 +269,7 @@ const Dashboard: React.FC = () => {
                 type="button"
                 onClick={handleExportProposal}
                 disabled={exporting}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-sm font-medium text-white transition shadow-sm"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-sm font-medium text-white transition shadow-sm cursor-pointer active:scale-95"
               >
                 <Download size={15} /> {exporting ? 'Exporting...' : 'Export Proposal (.md)'}
               </button>
@@ -486,13 +487,13 @@ const Dashboard: React.FC = () => {
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 rounded-lg"
+              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 rounded-lg transition cursor-pointer active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition cursor-pointer active:scale-95"
             >
               <Save size={15} /> Save and Re-run Pipeline
             </button>
@@ -513,8 +514,9 @@ const Dashboard: React.FC = () => {
           ].map(tab => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap ${
+              className={`px-4 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap cursor-pointer active:scale-[0.98] ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-400 bg-slate-800/40'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -791,14 +793,14 @@ const Dashboard: React.FC = () => {
                       type="button"
                       onClick={handleExportProposal}
                       disabled={exporting}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     >
                       <Download size={14} /> Download (.md)
                     </button>
                     <button
                       type="button"
                       onClick={() => window.print()}
-                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     >
                       <Printer size={14} /> Print / PDF
                     </button>
@@ -809,7 +811,7 @@ const Dashboard: React.FC = () => {
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
                         approvedSuccess
                           ? 'bg-emerald-800 text-emerald-200 cursor-default'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
                       }`}
                     >
                       <Check size={14} /> {approvedSuccess ? 'Approved ✓' : approving ? 'Approving...' : 'Approve Proposal'}

@@ -76,8 +76,9 @@ const LeadsList: React.FC = () => {
           {(['all', LeadStatus.Qualified, LeadStatus.NeedsInfo, LeadStatus.LowPriority] as const).map(status => (
             <button
               key={status}
+              type="button"
               onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
+              className={`px-4 py-2 rounded-lg font-medium transition cursor-pointer active:scale-95 ${
                 filter === status
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -130,7 +131,7 @@ const LeadsList: React.FC = () => {
                   <button
                     type="button"
                     onClick={(event) => handleDelete(event, lead)}
-                    className="rounded-lg p-2 text-slate-400 hover:bg-red-900/40 hover:text-red-300"
+                    className="rounded-lg p-2 text-slate-400 hover:bg-red-900/40 hover:text-red-300 transition cursor-pointer active:scale-90"
                     aria-label={`Delete ${lead.company_name || 'lead'}`}
                     title="Delete lead"
                   >

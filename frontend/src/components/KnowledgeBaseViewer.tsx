@@ -87,7 +87,7 @@ const KnowledgeBaseViewer: React.FC = () => {
             <button
               type="submit"
               disabled={searching}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition cursor-pointer active:scale-95"
             >
               {searching ? 'Querying...' : 'Search'}
             </button>
@@ -95,7 +95,7 @@ const KnowledgeBaseViewer: React.FC = () => {
               <button
                 type="button"
                 onClick={clearSearch}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm font-medium transition"
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm font-medium transition cursor-pointer active:scale-95"
               >
                 Clear
               </button>
@@ -106,8 +106,9 @@ const KnowledgeBaseViewer: React.FC = () => {
         {/* Tab switcher */}
         <div className="flex gap-3 mt-6 border-b border-slate-700">
           <button
+            type="button"
             onClick={() => { setActiveTab('products'); setSearchResults(null); }}
-            className={`pb-3 px-2 font-medium text-sm border-b-2 transition flex items-center gap-2 ${
+            className={`pb-3 px-2 font-medium text-sm border-b-2 transition flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === 'products'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-300'
@@ -116,8 +117,9 @@ const KnowledgeBaseViewer: React.FC = () => {
             <Layers size={16} /> Products ({products.length})
           </button>
           <button
+            type="button"
             onClick={() => { setActiveTab('services'); setSearchResults(null); }}
-            className={`pb-3 px-2 font-medium text-sm border-b-2 transition flex items-center gap-2 ${
+            className={`pb-3 px-2 font-medium text-sm border-b-2 transition flex items-center gap-2 cursor-pointer active:scale-95 ${
               activeTab === 'services'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-300'
@@ -134,7 +136,7 @@ const KnowledgeBaseViewer: React.FC = () => {
           <span>
             RAG Semantic Match for <strong>"{searchQuery}"</strong>: {searchResults.length} verified item(s) found.
           </span>
-          <button onClick={clearSearch} className="text-xs text-blue-400 hover:underline">Show all</button>
+          <button type="button" onClick={clearSearch} className="text-xs text-blue-400 hover:underline cursor-pointer">Show all</button>
         </div>
       )}
 

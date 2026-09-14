@@ -67,8 +67,11 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
     setError(null);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!isWeightValid) {
       setError(`Weights must sum to exactly 1.00 (currently ${totalWeight.toFixed(2)})`);
       return;
@@ -83,12 +86,10 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
     try {
       await api.updateScoringConfig(config);
       setSavedSuccess(true);
-      setTimeout(() => {
-        onClose();
-      }, 1200);
+      window.dispatchEvent(new CustomEvent('scoring-config-updated', { detail: config }));
+      onClose();
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || 'Failed to save configuration');
-    } finally {
       setSaving(false);
     }
   };
@@ -247,20 +248,21 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
             <button
               type="button"
               onClick={handleResetDefaults}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-1.5 transition"
+              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-1.5 transition cursor-pointer active:scale-95"
             >
               <RefreshCw size={14} /> Reset Defaults
             </button>
             <button
-              type="submit"
+              type="button"
+              onClick={handleSave}
               disabled={saving || !isWeightValid}
-              className={`px-5 py-2 text-sm font-semibold rounded-lg text-white transition ${
+              className={`px-5 py-2 text-sm font-semibold rounded-lg text-white transition cursor-pointer active:scale-95 ${
                 saving || !isWeightValid
                   ? 'bg-blue-600/50 text-slate-300 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
-              {saving ? 'Saving...' : 'Apply Configuration'}
+              {saving ? 'Applying...' : 'Apply Configuration'}
             </button>
           </div>
         </form>

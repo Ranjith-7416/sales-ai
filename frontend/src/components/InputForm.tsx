@@ -90,14 +90,14 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
             <button
               type="button"
               onClick={() => loadExample('pdf_processing')}
-              className="px-3 py-1.5 text-xs bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700 rounded-md font-medium transition"
+              className="px-3 py-1.5 text-xs bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700 rounded-md font-medium transition cursor-pointer active:scale-95"
             >
               📄 10k PDF Document AI
             </button>
             <button
               type="button"
               onClick={() => loadExample('conversational_ai')}
-              className="px-3 py-1.5 text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 rounded-md font-medium transition"
+              className="px-3 py-1.5 text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 rounded-md font-medium transition cursor-pointer active:scale-95"
             >
               💬 Conversational Support AI
             </button>
@@ -215,7 +215,7 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
             <button
               type="submit"
               disabled={loading || !formData.inquiry_text.trim()}
-              className={`w-full py-3 px-6 rounded-lg font-semibold transition ${
+              className={`w-full py-3 px-6 rounded-lg font-semibold transition cursor-pointer active:scale-[0.99] ${
                 loading
                   ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
