@@ -22,4 +22,5 @@ frontend/dist/
 *.db
 *.ses
 .DS_Store
+.chrome-user-data/
 backend/knowledge_base/.chroma/
