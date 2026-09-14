@@ -23,9 +23,10 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setSaving(false);
+    setSavedSuccess(false);
+    setError(null);
     if (isOpen) {
-      setSavedSuccess(false);
-      setError(null);
       api.getScoringConfig().then((data) => {
         if (data) {
           setConfig({
@@ -83,19 +84,30 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
 
     setSaving(true);
     setError(null);
+    setSavedSuccess(false);
     try {
       await api.updateScoringConfig(config);
       setSavedSuccess(true);
+      setSaving(false);
       window.dispatchEvent(new CustomEvent('scoring-config-updated', { detail: config }));
-      onClose();
+      setTimeout(() => {
+        setSavedSuccess(false);
+        onClose();
+      }, 600);
     } catch (err: any) {
       setError(err?.response?.data?.detail || err?.message || 'Failed to save configuration');
       setSaving(false);
+      setSavedSuccess(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between pb-4 border-b border-slate-700 mb-6">
           <div className="flex items-center gap-3">
@@ -256,13 +268,29 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
               type="button"
               onClick={handleSave}
               disabled={saving || !isWeightValid}
-              className={`px-5 py-2 text-sm font-semibold rounded-lg text-white transition cursor-pointer active:scale-95 ${
-                saving || !isWeightValid
+              className={`px-5 py-2 text-sm font-semibold rounded-lg text-white transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${
+                saving
+                  ? 'bg-blue-600/70 text-blue-100 cursor-wait'
+                  : savedSuccess
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20'
+                  : !isWeightValid
                   ? 'bg-blue-600/50 text-slate-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20'
               }`}
             >
-              {saving ? 'Applying...' : 'Apply Configuration'}
+              {saving ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Applying...</span>
+                </>
+              ) : savedSuccess ? (
+                <>
+                  <CheckCircle2 size={15} className="text-white" />
+                  <span>Applied!</span>
+                </>
+              ) : (
+                <span>Apply Configuration</span>
+              )}
             </button>
           </div>
         </form>
