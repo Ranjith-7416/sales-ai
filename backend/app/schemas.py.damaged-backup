@@ -1,0 +1,62 @@
+from typing import Optional, List, Dict, Any
+from enum import Enum
+from pydantic import BaseModel
+class ReviewerRecommendation(BaseModel):
+    issue: str
+    recommendation: str
+    priority: str
+
+
+class ReviewerCoverageItem(BaseModel):
+    requirement: str
+    addressed: str
+    where: str | List[str]
+
+
+class ReviewerClaimItem(BaseModel):
+    claim: str
+    verified: str
+    source: str | List[str]
+
+
+class ReviewerMissingInformation(BaseModel):
+    info: str
+    impact: str
+    to_ask: str | List[str]
+
+
+class ReviewerEscalationPath(BaseModel):
+    approval_required: bool = False
+    approver: Optional[str] = None
+
+
+class ReviewerOutput(BaseModel):
+    """Output from Decision/Reviewer Agent"""
+    coverage_validation: List[ReviewerCoverageItem]
+    claim_verification: List[ReviewerClaimItem]
+    unsupported_requirements: List[str]
+    missing_information: List[ReviewerMissingInformation]
+    risk_assessment: Dict[str, List[str]]
+    readiness_assessment: Dict[str, Any]
+    recommended_next_steps: List[str]
+    follow_up_questions: List[str]
+    escalation_path: ReviewerEscalationPath
+    approval_required: bool = False
+    approver: Optional[str] = None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

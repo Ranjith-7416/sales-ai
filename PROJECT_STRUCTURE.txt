@@ -1,0 +1,96 @@
+sales-ai/
+├── .github/
+│   └── agents/
+│       ├── orchestrator.agent.md
+│       ├── research.agent.md
+│       ├── requirements.agent.md
+│       ├── qualification.agent.md
+│       ├── solution-matching.agent.md
+│       ├── proposal.agent.md
+│       ├── reviewer.agent.md
+│       └── README.md
+│
+├── backend/
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── models.py
+│   │   ├── database.py
+│   │   ├── schemas.py
+│   │   │
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── leads.py
+│   │   │   ├── proposals.py
+│   │   │   └── knowledge_base.py
+│   │   │
+│   │   ├── agents/
+│   │   │   ├── __init__.py
+│   │   │   ├── orchestrator.py
+│   │   │   ├── research_agent.py
+│   │   │   ├── requirements_agent.py
+│   │   │   ├── qualification_agent.py
+│   │   │   ├── solution_agent.py
+│   │   │   ├── proposal_agent.py
+│   │   │   └── reviewer_agent.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── llm_service.py
+│   │   │   ├── web_search.py
+│   │   │   ├── document_processor.py
+│   │   │   ├── rag_service.py
+│   │   │   └── cache_service.py
+│   │   │
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       └── logger.py
+│   │
+│   ├── knowledge_base/
+│   │   ├── products.json
+│   │   ├── services.json
+│   │   └── embeddings/
+│   │
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── Dockerfile
+│
+├── frontend/
+│   ├── src/
+│   │   ├── index.tsx
+│   │   ├── App.tsx
+│   │   ├── App.css
+│   │   │
+│   │   ├── components/
+│   │   │   ├── InputForm.tsx
+│   │   │   ├── PipelineProgress.tsx
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── ResearchCard.tsx
+│   │   │   ├── RequirementsCard.tsx
+│   │   │   ├── QualificationCard.tsx
+│   │   │   ├── SolutionCard.tsx
+│   │   │   ├── ProposalCard.tsx
+│   │   │   ├── ReviewerCard.tsx
+│   │   │   └── ProposalPreview.tsx
+│   │   │
+│   │   ├── hooks/
+│   │   │   ├── useLeadQualification.ts
+│   │   │   └── useApi.ts
+│   │   │
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   │
+│   │   └── styles/
+│   │       └── tailwind.css
+│   │
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── tailwind.config.js
+│   ├── Dockerfile
+│   └── .env.example
+│
+├── docker-compose.yml
+├── .env.example
+├── README.md
+└── DEPLOYMENT.md

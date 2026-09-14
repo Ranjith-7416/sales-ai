@@ -1,0 +1,130 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
+import json
+import os
+from pathlib import Path
+
+
+BACKEND_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+
+def _parse_cors_origins(value: str) -> list[str]:
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except json.JSONDecodeError:
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+def _resolve_knowledge_base_path(raw_path: str) -> str:
+    path = Path(raw_path)
+    if path.is_absolute() and path.exists():
+        return str(path)
+    if path.exists():
+        return str(path.resolve())
+    backend_kb = Path(__file__).resolve().parents[1] / raw_path
+    if backend_kb.exists():
+        return str(backend_kb.resolve())
+    return str(path)
+
+
+class Settings(BaseSettings):
+    # App
+    APP_NAME: str = "Sales AI Pipeline"
+    APP_VERSION: str = "1.0.0"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+
+    # Server
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+
+    # Database
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://salesai:salesai_password@localhost:5432/salesai_db"
+    )
+
+    # Redis
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_TIMEOUT_SECONDS: float = float(os.getenv("REDIS_TIMEOUT_SECONDS", "5"))
+
+    # API protection and operational limits
+    API_AUTH_TOKEN: Optional[str] = os.getenv("API_AUTH_TOKEN")
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+    RATE_LIMIT_LEAD_REQUESTS: int = int(os.getenv("RATE_LIMIT_LEAD_REQUESTS", "10"))
+    RATE_LIMIT_PROPOSAL_REQUESTS: int = int(os.getenv("RATE_LIMIT_PROPOSAL_REQUESTS", "30"))
+    RATE_LIMIT_KB_UPLOADS: int = int(os.getenv("RATE_LIMIT_KB_UPLOADS", "10"))
+    WEB_SEARCH_TIMEOUT_SECONDS: float = float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "15"))
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
+    DATABASE_CONNECT_TIMEOUT_SECONDS: int = int(os.getenv("DATABASE_CONNECT_TIMEOUT_SECONDS", "10"))
+
+    # LLM Configuration
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini")  # gemini, groq, openrouter, anthropic, openai, google
+    LLM_FALLBACK_PROVIDERS: str = os.getenv("LLM_FALLBACK_PROVIDERS", "groq")
+    ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
+    OPENROUTER_API_KEY: Optional[str] = os.getenv("OPENROUTER_API_KEY")
+    GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+
+    # Models
+    LLM_MODEL_MAIN: str = os.getenv("LLM_MODEL_MAIN", "gemini-1.5-flash")
+    LLM_MODEL_REASONING: str = os.getenv("LLM_MODEL_REASONING", "gemini-1.5-flash")
+    OPENROUTER_MODEL_MAIN: Optional[str] = os.getenv("OPENROUTER_MODEL_MAIN")
+    OPENROUTER_MODEL_REASONING: Optional[str] = os.getenv("OPENROUTER_MODEL_REASONING")
+    GROQ_MODEL_MAIN: Optional[str] = os.getenv("GROQ_MODEL_MAIN", "llama-3.3-70b-versatile")
+    GROQ_MODEL_REASONING: Optional[str] = os.getenv("GROQ_MODEL_REASONING", "llama-3.3-70b-versatile")
+    LLM_TEMPERATURE: float = 0.7
+
+    # Qualification scoring
+    QUALIFIED_SCORE_THRESHOLD: float = float(os.getenv("QUALIFIED_SCORE_THRESHOLD", "75"))
+    NEEDS_INFO_SCORE_THRESHOLD: float = float(os.getenv("NEEDS_INFO_SCORE_THRESHOLD", "50"))
+    FIT_SCORE_WEIGHT: float = float(os.getenv("FIT_SCORE_WEIGHT", "0.25"))
+    READINESS_SCORE_WEIGHT: float = float(os.getenv("READINESS_SCORE_WEIGHT", "0.25"))
+    OPPORTUNITY_SCORE_WEIGHT: float = float(os.getenv("OPPORTUNITY_SCORE_WEIGHT", "0.30"))
+    RISK_SCORE_WEIGHT: float = float(os.getenv("RISK_SCORE_WEIGHT", "0.20"))
+
+    # Web Search
+    BRAVE_SEARCH_API_KEY: Optional[str] = os.getenv("BRAVE_SEARCH_API_KEY") or os.getenv("BRAVE_API_KEY")
+    SERPER_API_KEY: Optional[str] = os.getenv("SERPER_API_KEY")
+
+    # Knowledge Base
+    KNOWLEDGE_BASE_PATH: str = _resolve_knowledge_base_path(os.getenv("KNOWLEDGE_BASE_PATH", "knowledge_base"))
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+
+    # Cors
+    CORS_ORIGINS: list = _parse_cors_origins(os.getenv(
+        "CORS_ORIGINS",
+        '["http://localhost:3000", "http://localhost:5173"]',
+    ))
+
+    # JWT
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    model_config = SettingsConfigDict(
+        env_file=(str(BACKEND_ENV_FILE), ".env"),
+        case_sensitive=True,
+    )
+
+
+settings = Settings()
+
+
+def validate_production_settings() -> None:
+    if settings.ENVIRONMENT.lower() != "production":
+        return
+
+    missing = []
+    if not settings.DATABASE_URL or "user:password" in settings.DATABASE_URL:
+        missing.append("DATABASE_URL")
+    if not settings.SECRET_KEY or settings.SECRET_KEY.startswith("your-"):
+        missing.append("SECRET_KEY")
+    if not settings.API_AUTH_TOKEN:
+        missing.append("API_AUTH_TOKEN")
+    if not settings.CORS_ORIGINS or any("localhost" in origin for origin in settings.CORS_ORIGINS):
+        missing.append("CORS_ORIGINS")
+    if missing:
+        raise RuntimeError("Production configuration is incomplete: " + ", ".join(missing))

@@ -1,0 +1,176 @@
+[
+  {
+    "id": "svc-001",
+    "name": "Implementation & Integration",
+    "category": "Professional Services",
+    "description": "Complete implementation, customization, and integration services",
+    "scope_of_work": [
+      "Requirement gathering and analysis",
+      "System design and architecture",
+      "Custom development and integration",
+      "Data migration and ETL",
+      "Testing and quality assurance",
+      "Deployment and go-live support",
+      "Post-launch optimization"
+    ],
+    "duration": "4-12 weeks",
+    "team_composition": [
+      "Solution Architect",
+      "Senior Developers (2-3)",
+      "QA Engineer",
+      "Project Manager"
+    ],
+    "pricing": "$50,000 - $500,000",
+    "deliverables": [
+      "Detailed solution design",
+      "Fully integrated system",
+      "Comprehensive documentation",
+      "Staff training materials",
+      "Post-launch support (30 days)"
+    ],
+    "certifications_provided": [
+      "Implementation Partner Certification",
+      "Project Management Certification"
+    ]
+  },
+  {
+    "id": "svc-002",
+    "name": "Training & Knowledge Transfer",
+    "category": "Training Services",
+    "description": "Comprehensive training and knowledge transfer programs",
+    "training_modules": [
+      "Administrator training (2 days)",
+      "End-user training (1 day)",
+      "Advanced features workshop (1 day)",
+      "Custom workflows (as needed)",
+      "API development training (1 day)"
+    ],
+    "delivery_format": [
+      "Virtual instructor-led",
+      "On-site training",
+      "Self-paced online",
+      "Hybrid model"
+    ],
+    "duration": "1-2 weeks",
+    "team_composition": [
+      "Lead Trainer",
+      "Subject Matter Expert",
+      "Documentation Specialist"
+    ],
+    "pricing": "$10,000 - $50,000",
+    "deliverables": [
+      "Training materials",
+      "Video recordings",
+      "Documentation",
+      "Reference guides",
+      "Certification exams"
+    ],
+    "max_participants": 50,
+    "certification_included": true
+  },
+  {
+    "id": "svc-003",
+    "name": "Premium Support & Maintenance",
+    "category": "Support Services",
+    "description": "Enterprise-grade support with guaranteed response times",
+    "support_tiers": [
+      "24/7 phone support",
+      "Priority incident handling",
+      "Technical consulting",
+      "Performance optimization",
+      "Security audits",
+      "Upgrade planning"
+    ],
+    "response_time_sla": {
+      "critical": "1 hour",
+      "high": "4 hours",
+      "medium": "8 hours",
+      "low": "24 hours"
+    },
+    "duration": "12 months (renewable)",
+    "team_size": "Dedicated account team (3-5 people)",
+    "pricing": "$20,000 - $100,000/year",
+    "deliverables": [
+      "Quarterly business reviews",
+      "System health reports",
+      "Upgrade recommendations",
+      "Security assessments",
+      "Performance optimization"
+    ],
+    "max_incidents_included": "Unlimited",
+    "incident_tracking": "Dedicated portal"
+  },
+  {
+    "id": "svc-004",
+    "name": "Custom Development",
+    "category": "Development Services",
+    "description": "Bespoke development for custom requirements and extensions",
+    "services_included": [
+      "Custom modules development",
+      "API development",
+      "Mobile app development",
+      "Third-party integrations",
+      "Data science/ML models",
+      "Automated workflows"
+    ],
+    "technology_stack": [
+      "Python",
+      "JavaScript/TypeScript",
+      "Java",
+      "Go",
+      "C#/.NET"
+    ],
+    "duration": "Flexible (4 weeks - 12+ months)",
+    "team_composition": "Scaled to project needs",
+    "pricing": "$150/hour - $300/hour",
+    "deliverables": [
+      "Source code repository",
+      "Technical documentation",
+      "Unit tests",
+      "Deployment guide",
+      "Maintenance manual"
+    ],
+    "agile_methodology": true,
+    "sprint_length": 2
+  },
+  {
+    "id": "svc-005",
+    "name": "Security & Compliance Audit",
+    "category": "Compliance Services",
+    "description": "Comprehensive security assessment and compliance audit",
+    "audit_scope": [
+      "Infrastructure security",
+      "Application security",
+      "Data protection",
+      "Access controls",
+      "Compliance framework review",
+      "Vulnerability assessment",
+      "Penetration testing"
+    ],
+    "compliance_standards": [
+      "ISO 27001",
+      "SOC 2",
+      "GDPR",
+      "HIPAA",
+      "PCI-DSS",
+      "FedRAMP",
+      "NIST"
+    ],
+    "duration": "2-4 weeks",
+    "team_composition": [
+      "Lead Security Auditor",
+      "Compliance Specialist",
+      "Penetration Tester"
+    ],
+    "pricing": "$25,000 - $75,000",
+    "deliverables": [
+      "Security audit report",
+      "Risk assessment matrix",
+      "Remediation roadmap",
+      "Compliance checklist",
+      "Executive summary"
+    ],
+    "remediation_support": "3 months included",
+    "certification_support": true
+  }
+]
