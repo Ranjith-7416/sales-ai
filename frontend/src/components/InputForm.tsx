@@ -122,41 +122,103 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Customer information */}
           <div className="border-t border-slate-700 pt-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Customer information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold text-white mb-1">Customer information</h3>
+            <p className="text-slate-400 text-xs mb-4">Fill in the blocks below or leave blank to auto-detect from the inquiry document.</p>
+            
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Company / Organization <span className="text-blue-400">*</span>
+              </label>
               <input
                 type="text"
                 name="company_name"
-                placeholder="Company / organization"
+                placeholder="e.g. MedCare Health Services, MediTech Solutions"
                 value={formData.company_name || ''}
                 onChange={handleChange}
                 required={!documentFile}
-                className="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
               />
-              <input
-                type="text"
-                name="contact_name"
-                placeholder="Contact name (optional)"
-                value={formData.contact_name || ''}
-                onChange={handleChange}
-                className="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
-              <input
-                type="email"
-                name="email"
-                placeholder="Email (optional)"
-                value={formData.email || ''}
-                onChange={handleChange}
-                className="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
-              <input
-                type="text"
-                name="industry"
-                placeholder="Industry (optional)"
-                value={formData.industry || ''}
-                onChange={handleChange}
-                className="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
+            </div>
+
+            {/* The 6 Lead Context Blocks Grid matching user design */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {/* Block 1: Contact */}
+              <div className="bg-slate-750/90 bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Contact</label>
+                <input
+                  type="text"
+                  name="contact_name"
+                  placeholder="e.g. 7416503742 or Ranjith Kumar"
+                  value={formData.contact_name || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Block 2: Email */}
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="e.g. ranjithkumar3742@gmail.com"
+                  value={formData.email || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Block 3: Industry */}
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Industry</label>
+                <input
+                  type="text"
+                  name="industry"
+                  placeholder="e.g. Healthcare, Financial Services"
+                  value={formData.industry || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Block 4: Company Size */}
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Company Size</label>
+                <input
+                  type="text"
+                  name="company_size"
+                  placeholder="e.g. 250-500 employees"
+                  value={formData.company_size || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Block 5: Budget */}
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Budget</label>
+                <input
+                  type="text"
+                  name="budget"
+                  placeholder="e.g. $15,000 - $35,000/month"
+                  value={formData.budget || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Block 6: Timeline */}
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+                <label className="block text-xs text-slate-400 mb-1">Timeline</label>
+                <input
+                  type="text"
+                  name="timeline"
+                  placeholder="e.g. 1-2 months, Q4 Rollout"
+                  value={formData.timeline || ''}
+                  onChange={handleChange}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
