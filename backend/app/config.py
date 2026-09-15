@@ -116,7 +116,16 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "sales@salesai-platform.com")
     SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 
+    # Frontend URL (Vercel production URL or localhost)
+    FRONTEND_URL: str = os.getenv(
+        "FRONTEND_URL",
+        "https://sales-ai-ranjith-7416s-projects.vercel.app"
+        if os.getenv("ENVIRONMENT", "").lower() == "production"
+        else "http://localhost:3000"
+    )
+
     model_config = SettingsConfigDict(
+
         env_file=(str(BACKEND_ENV_FILE), ".env"),
         case_sensitive=True,
     )

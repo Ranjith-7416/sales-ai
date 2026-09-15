@@ -167,7 +167,7 @@ async def api_root(request: Request):
       <div class="card">
         <div class="card-label">Frontend Web App</div>
         <div class="card-val" style="color: #34d399;">
-          <span>💻</span> React &bull; localhost:3000
+          <span>💻</span> React &bull; {settings.FRONTEND_URL.replace("https://", "").replace("http://", "")}
         </div>
       </div>
     </div>
@@ -180,10 +180,11 @@ async def api_root(request: Request):
       <a href="/redoc" class="btn btn-secondary" target="_blank">
         📖 ReDoc API Spec (/redoc)
       </a>
-      <a href="http://localhost:3000" class="btn btn-success" target="_blank">
-        🚀 Launch Frontend Workspace (localhost:3000)
+      <a href="{settings.FRONTEND_URL}" class="btn btn-success" target="_blank">
+        🚀 Launch Frontend Workspace
       </a>
     </div>
+
 
     <!-- Core API Endpoints -->
     <div class="section-title">
@@ -243,7 +244,7 @@ async def api_root(request: Request):
         "app": settings.APP_NAME,
         "status": "running",
         "version": settings.APP_VERSION,
-        "frontend": "http://localhost:3000",
+        "frontend": settings.FRONTEND_URL,
         "docs": "/docs",
         "redoc": "/redoc",
         "health": "/health",
