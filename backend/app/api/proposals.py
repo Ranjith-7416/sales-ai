@@ -1,10 +1,10 @@
-"""Proposals API Routes"""
 from fastapi import APIRouter, Depends, HTTPException, Body
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Proposal, Lead
 from app.security import rate_limit, require_auth
+from app.services.email_service import dispatch_proposal_email, build_proposal_email_content
 from datetime import datetime
 import uuid
 import logging
@@ -360,3 +360,26 @@ async def export_proposal(lead_id: str, format: str = "markdown", db: Session = 
         "html": html_content,
         "filename": f"Proposal_{company.replace(' ', '_')}_{lead_id[:8]}.{'html' if format == 'html' else 'md'}",
     }
+
+
+@router.get("/{lead_id}/email-view", response_class=HTMLResponse)
+async def view_proposal_email_html(lead_id: str, db: Session = Depends(get_db)):
+    """View the exact HTML email generated for the client in browser"""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
+        lead.proposal_result = lead.pipeline_result.get("proposal")
+    if not lead.proposal_result:
+        raise HTTPException(status_code=404, detail="No proposal generated yet")
+
+    target_email = lead.proposal_result.get("sent_to") or lead.email or "client@example.com"
+    company = lead.company_name or "Valued Client"
+
+    _, html_content = build_proposal_email_content(
+        recipient_email=target_email,
+        company_name=company,
+        proposal_data=lead.proposal_result,
+    )
+    return HTMLResponse(content=html_content)
+
