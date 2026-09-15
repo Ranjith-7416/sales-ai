@@ -23,6 +23,12 @@ class LeadMemoryInput(BaseModel):
 
 
 def _missing_customer_information(lead: Lead) -> list[str]:
+    inquiry = (lead.inquiry_text or "").lower()
+    spam_terms = ('homework', 'school', 'essay', 'crypto', 'bitcoin', 'shoes', 'weather', 'game', 'gaming', 'personal use', 'recipe')
+    free_terms = ('free only', 'no budget', 'zero budget', 'cant pay', 'cannot pay', 'have no money', 'student')
+    if any(w in inquiry for w in spam_terms) or any(w in inquiry for w in free_terms):
+        return []
+
     missing_information = []
     if not lead.company_size:
         missing_information.append("Company size and number of users")
@@ -32,11 +38,10 @@ def _missing_customer_information(lead: Lead) -> list[str]:
         missing_information.append("Target implementation timeline")
 
     context = (lead.additional_context or "").lower()
-    inquiry = (lead.inquiry_text or "").lower()
     combined = f"{context} {inquiry}"
-    if not any(term in combined for term in ("decision-maker", "decision maker", "approval", "vp", "director", "head of", "lead", "manager")):
+    if not lead.contact_name and not any(term in combined for term in ("decision-maker", "decision maker", "approval", "vp", "director", "head of", "lead", "manager", "dr", "cto", "ceo", "founder")):
         missing_information.append("Decision-maker and approval process")
-    if not any(term in combined for term in ("success", "integration", "ocr", "api", "accuracy", "documents", "turnaround")):
+    if not any(term in combined for term in ("success", "integration", "ocr", "api", "accuracy", "documents", "turnaround", "ehr", "records", "invoices", "platform", "automate", "system", "compliance")):
         missing_information.append("Success criteria and required integrations")
     return missing_information
 
@@ -105,6 +110,9 @@ async def create_lead_from_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     company_name: str | None = Form(None),
+    contact_name: str | None = Form(None),
+    email: str | None = Form(None),
+    inquiry_text: str | None = Form(None),
     industry: str | None = Form(None),
     company_size: str | None = Form(None),
     budget: str | None = Form(None),
@@ -118,14 +126,22 @@ async def create_lead_from_document(
             raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
 
         content = await file.read()
-        inquiry_text = await get_document_processor().extract_from_file(file.filename, content)
-        if not inquiry_text.strip():
+        extracted_doc_text = await get_document_processor().extract_from_file(file.filename, content)
+        if not extracted_doc_text.strip():
             raise HTTPException(status_code=400, detail="The uploaded document contains no readable text")
+
+        combined_inquiry = (
+            f"{inquiry_text.strip()}\n\n[Document Content - {file.filename}]:\n{extracted_doc_text}"
+            if inquiry_text and inquiry_text.strip() and not inquiry_text.startswith("Customer RFP document:")
+            else extracted_doc_text
+        )
 
         lead_id = str(uuid.uuid4())
         lead_input = LeadInputSchema(
             company_name=company_name,
-            inquiry_text=inquiry_text,
+            inquiry_text=combined_inquiry,
+            contact_name=contact_name,
+            email=email,
             industry=industry,
             company_size=company_size,
             budget=budget,
@@ -135,7 +151,9 @@ async def create_lead_from_document(
         lead = Lead(
             id=lead_id,
             company_name=company_name,
-            inquiry_text=inquiry_text,
+            contact_name=contact_name,
+            email=email,
+            inquiry_text=combined_inquiry,
             industry=industry,
             company_size=company_size,
             budget=budget,
@@ -207,7 +225,7 @@ async def get_lead(lead_id: str, db: Session = Depends(get_db)):
             }
         elif result["requirements_result"].get("missing_information") is None:
             result["requirements_result"]["missing_information"] = missing_information
-        if not result.get("qualification_result") or result["qualification_result"].get("composite_score") in (None, 0):
+        if not result.get("qualification_result") or (result["qualification_result"].get("composite_score") is None and not lead.completed_at):
             completeness = sum(bool(value) for value in (
                 lead.company_name,
                 lead.industry,
@@ -220,7 +238,7 @@ async def get_lead(lead_id: str, db: Session = Depends(get_db)):
             status = "Qualified" if score >= settings.QUALIFIED_SCORE_THRESHOLD else "Needs More Information" if score >= settings.NEEDS_INFO_SCORE_THRESHOLD else "Low Priority"
             result["qualification_result"] = {
                 "lead_status": status,
-                "composite_score": lead.composite_score or score,
+                "composite_score": lead.composite_score if lead.composite_score is not None else score,
                 "fit_score": score,
                 "fit_evidence": "Rule-based score from the completeness of the customer profile.",
                 "readiness_score": round(score * 0.9),
@@ -358,7 +376,7 @@ async def list_leads(
                 lead.additional_context,
             ))
             score = lead.composite_score
-            if score is None or score == 0:
+            if score is None and not lead.completed_at and lead.lead_status != "Processing":
                 score = round(completeness / 6 * 100)
             if lead.requirements_result and isinstance(lead.requirements_result, dict) and lead.requirements_result.get("missing_information") is not None:
                 missing_information = lead.requirements_result["missing_information"]
@@ -366,11 +384,14 @@ async def list_leads(
                 missing_information = lead.pipeline_result["requirements_result"]["missing_information"]
             else:
                 missing_information = _missing_customer_information(lead)
-            current_status = normalize_lead_status(
-                lead.lead_status,
-                score,
-                missing_information,
-            )
+            if lead.lead_status == "Processing":
+                current_status = "Processing"
+            else:
+                current_status = normalize_lead_status(
+                    lead.lead_status,
+                    score,
+                    missing_information,
+                )
             lead_cards.append({
                 "id": lead.id,
                 "company_name": lead.company_name,

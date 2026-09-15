@@ -210,18 +210,25 @@ async def _process_lead_qualification(lead_id: str, lead_input: dict | LeadInput
         # Keep the lead useful when an external LLM is unavailable: show the
         # customer information still needed instead of leaving the result blank.
         missing_information = []
-        for field, label in (
-            ("company_size", "Company size and number of users"),
-            ("budget", "Budget range or expected investment"),
-            ("timeline", "Target implementation timeline"),
-        ):
-            if not lead_input.get(field):
-                missing_information.append(label)
-        context = (lead_input.get("additional_context") or "").lower()
-        if not any(term in context for term in ("decision-maker", "decision maker", "approval")):
-            missing_information.append("Decision-maker and approval process")
-        if not any(term in context for term in ("success", "integration")):
-            missing_information.append("Success criteria and required integrations")
+        inquiry_lower = (lead_input.get("inquiry_text") or "").lower()
+        spam_terms = ('homework', 'school', 'essay', 'crypto', 'bitcoin', 'shoes', 'weather', 'game', 'gaming', 'personal use', 'recipe')
+        free_terms = ('free only', 'no budget', 'zero budget', 'cant pay', 'cannot pay', 'have no money', 'student')
+        is_spam_lead = any(w in inquiry_lower for w in spam_terms) or any(w in inquiry_lower for w in free_terms)
+
+        if not is_spam_lead:
+            for field, label in (
+                ("company_size", "Company size and number of users"),
+                ("budget", "Budget range or expected investment"),
+                ("timeline", "Target implementation timeline"),
+            ):
+                if not lead_input.get(field):
+                    missing_information.append(label)
+            context = (lead_input.get("additional_context") or "").lower()
+            combined_ctx = f"{context} {inquiry_lower}"
+            if not lead_input.get("contact_name") and not any(term in combined_ctx for term in ("decision-maker", "decision maker", "approval", "vp", "director", "head of", "lead", "manager", "dr", "cto", "ceo")):
+                missing_information.append("Decision-maker and approval process")
+            if not any(term in combined_ctx for term in ("success", "integration", "ocr", "api", "accuracy", "documents", "turnaround", "ehr", "records", "invoices", "platform", "automate")):
+                missing_information.append("Success criteria and required integrations")
         if not result.get("requirements_result"):
             result["requirements_result"] = {
                 "functional_requirements": [lead_input.get("inquiry_text", "")],

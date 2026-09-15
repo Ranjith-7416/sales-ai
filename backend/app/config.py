@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     LLM_MODEL_REASONING: str = os.getenv("LLM_MODEL_REASONING", "gemini-1.5-flash")
     OPENROUTER_MODEL_MAIN: Optional[str] = os.getenv("OPENROUTER_MODEL_MAIN")
     OPENROUTER_MODEL_REASONING: Optional[str] = os.getenv("OPENROUTER_MODEL_REASONING")
-    GROQ_MODEL_MAIN: Optional[str] = os.getenv("GROQ_MODEL_MAIN", "llama-3.3-70b-versatile")
-    GROQ_MODEL_REASONING: Optional[str] = os.getenv("GROQ_MODEL_REASONING", "llama-3.3-70b-versatile")
+    GROQ_MODEL_MAIN: Optional[str] = os.getenv("GROQ_MODEL_MAIN", "openai/gpt-oss-120b")
+    GROQ_MODEL_REASONING: Optional[str] = os.getenv("GROQ_MODEL_REASONING", "openai/gpt-oss-120b")
     LLM_TEMPERATURE: float = 0.7
 
     # Qualification scoring

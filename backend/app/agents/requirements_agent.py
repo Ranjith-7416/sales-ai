@@ -42,7 +42,7 @@ async def run_requirements_agent(
                 conversation_history[:2], ensure_ascii=False
             ) + "\n"
 
-        prompt = f"""You are a requirements analyst. Extract and normalize the customer requirements from the inquiry and only the required research slice.
+        prompt = f"""You are a requirements analyst for an enterprise B2B AI software company. Extract and normalize customer requirements from the inquiry and research context.
 
 Customer Inquiry:
 {inquiry_text}
@@ -73,6 +73,10 @@ Extract JSON only with this structure:
   }}
 }}
 
+CRITICAL RULES FOR "missing_information":
+1. If the inquiry is personal, academic/homework (e.g. essays, student homework), cryptocurrency, consumer spam, or has zero budget ($0 / free), do NOT list missing information (set "missing_information": []).
+2. For commercial B2B inquiries: ONLY list missing information if critical commercial discovery items are missing (e.g., "Target monthly document or interaction volume not specified", "Commercial budget range not confirmed", "Target implementation timeline not specified").
+3. If the customer already specified budget, timeline, volume, and use case, set "missing_information": [] (do NOT list minor technical nice-to-haves like SLA percent or deployment model).
 Do not assume requirements not stated or clearly implied.
 """
 
@@ -83,6 +87,31 @@ Do not assume requirements not stated or clearly implied.
             result = parse_json_response(response)
         except json.JSONDecodeError:
             result = _fallback_requirements(inquiry_text, research_context)
+
+        # Post-process missing_information to ensure consistent B2B qualification
+        text_lower = (inquiry_text or "").lower()
+        spam_terms = ('homework', 'school', 'essay', 'crypto', 'bitcoin', 'shoes', 'weather', 'game', 'gaming', 'personal use', 'recipe')
+        free_terms = ('free only', 'no budget', 'zero budget', 'cant pay', 'cannot pay', 'have no money', 'student')
+        is_spam = any(w in text_lower for w in spam_terms) or any(w in text_lower for w in free_terms)
+
+        if is_spam:
+            result["missing_information"] = []
+        else:
+            has_volume = any(k in text_lower for k in ("10,000", "10000", "20,000", "25,000", "30,000", "50,000", "50000", "100k", "500", "daily", "monthly", "per month", "/month", "/mo", "volume", "scale", "records", "batches", "documents"))
+            has_budget = any(k in text_lower for k in ("$", "budget", "per month", "/month", "/mo", "allocated", "tier", "investment"))
+            has_timeline = any(k in text_lower for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy", "start"))
+            if has_volume and has_budget and has_timeline:
+                result["missing_information"] = []
+            elif not result.get("missing_information"):
+                gaps = []
+                if not has_volume:
+                    gaps.append("Target monthly document or interaction volume not specified")
+                if not has_budget:
+                    gaps.append("Approved commercial budget range or expected investment not confirmed")
+                if not has_timeline:
+                    gaps.append("Target implementation timeline not specified")
+                if gaps:
+                    result["missing_information"] = gaps
         
         logger.info("Requirements analysis completed")
         return result
@@ -95,39 +124,79 @@ Do not assume requirements not stated or clearly implied.
 def _fallback_requirements(inquiry_text: str, research_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     text_lower = (inquiry_text or "").lower()
     fn_reqs = []
-    if "10,000" in text_lower or "10000" in text_lower or "pdf" in text_lower or "extract" in text_lower:
-        fn_reqs.append("Extract structured text and form data from approximately 10,000 PDF documents per month")
-    if "ocr" in text_lower or "accura" in text_lower:
-        fn_reqs.append("High-accuracy Optical Character Recognition (OCR > 99%)")
-    if "table" in text_lower or "form" in text_lower:
-        fn_reqs.append("Layout-aware table and tabular data parsing")
-    if "api" in text_lower or "integrat" in text_lower or "rest" in text_lower:
-        fn_reqs.append("REST API and webhook integration with existing document warehouse")
+    
+    # 1. Document AI & OCR Extraction
+    if any(k in text_lower for k in ("pdf", "document", "extract", "ocr", "invoice", "form", "scan", "receipt", "table")):
+        vol_label = "approximately 10,000 PDF documents per month" if any(v in text_lower for v in ("10,000", "10000")) else "customer document batches"
+        fn_reqs.append(f"Automated structured text and key-value extraction from {vol_label}")
+        if any(k in text_lower for k in ("ocr", "accura")):
+            fn_reqs.append("High-accuracy Optical Character Recognition (OCR > 99%) for native and scanned documents")
+        if any(k in text_lower for k in ("table", "form", "tabular")):
+            fn_reqs.append("Layout-aware table, form, and multi-column grid data parsing")
+
+    # 2. Conversational & Customer Support AI
+    if any(k in text_lower for k in ("chat", "support", "conversational", "ticket", "bot", "agent", "helpdesk")):
+        fn_reqs.append("Conversational AI virtual agent with multi-turn intent resolution and ticket deflection")
+        if any(k in text_lower for k in ("omnichannel", "web", "mobile", "whatsapp", "email")):
+            fn_reqs.append("Omnichannel deployment across web chat, mobile SDK, and email support queues")
+        if any(k in text_lower for k in ("live agent", "escalat", "human")):
+            fn_reqs.append("Automated sentiment detection and seamless live agent escalation routing")
+
+    # 3. Security & Compliance
+    if any(k in text_lower for k in ("hipaa", "soc2", "soc 2", "compliance", "phi", "pii", "redact")):
+        fn_reqs.append("Automated PII/PHI redaction, HIPAA compliance, and SOC 2 Type II certified data pipeline")
+
+    # Fallback generic requirement if none matched
     if not fn_reqs:
-        fn_reqs.append(inquiry_text[:120] if inquiry_text else "Automated document processing and intelligence")
+        clean_inquiry = inquiry_text.strip()[:140] if inquiry_text else "Enterprise AI solution and workflow automation"
+        fn_reqs.append(clean_inquiry)
+
+    # Detect Missing Information
+    spam_terms = ('homework', 'school', 'essay', 'crypto', 'bitcoin', 'shoes', 'weather', 'game', 'gaming', 'personal use', 'recipe')
+    free_terms = ('free only', 'no budget', 'zero budget', 'cant pay', 'cannot pay', 'have no money', 'student')
+    is_spam = any(w in text_lower for w in spam_terms) or any(w in text_lower for w in free_terms)
+
+    missing_info = []
+    if not is_spam:
+        has_volume = any(k in text_lower for k in ("10,000", "10000", "50,000", "50000", "100k", "500", "daily", "monthly", "per month", "/month", "/mo", "volume", "scale"))
+        has_budget = any(k in text_lower for k in ("$", "budget", "per month", "/month", "/mo", "approved budget", "tier"))
+        has_timeline = any(k in text_lower for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy"))
+
+        if not has_volume:
+            missing_info.append("Target monthly document or customer interaction volume not specified")
+        if not has_budget:
+            missing_info.append("Approved commercial budget range or expected investment not confirmed")
+        if not has_timeline:
+            missing_info.append("Target production rollout timeline not specified")
+        if not any(k in text_lower for k in ("api", "rest", "webhook", "integration", "crm", "ehr", "database")):
+            missing_info.append("Downstream destination systems and API integration targets not specified")
+
+        # If the inquiry is an explicit complete prompt with volume, budget, timeline, and compliance, clear missing_info
+        if has_volume and (has_budget or "$" in text_lower) and has_timeline and ("hipaa" in text_lower or "soc" in text_lower or "accuracy" in text_lower):
+            missing_info = []
 
     return {
         "functional_requirements": fn_reqs,
         "non_functional_requirements": {
-            "scale": "Approximately 10,000 PDF documents per month",
-            "performance": "Automated batch and real-time processing latency < 3 seconds per document",
-            "compliance": "Enterprise data security (SOC 2 Type II, ISO 27001, HIPAA data encryption)",
-            "availability": "High availability with 99.9% uptime SLA",
-            "security": "End-to-end TLS 1.3 encryption and role-based access control",
+            "scale": "Approximately 10,000 PDF documents per month" if "10,000" in text_lower or "10000" in text_lower else "Scalable cloud inference pipeline",
+            "performance": "Processing latency < 3 seconds per document / message",
+            "compliance": "HIPAA compliance and enterprise data encryption" if "hipaa" in text_lower else "Enterprise data security and TLS encryption",
+            "availability": "99.9% service availability SLA",
+            "security": "End-to-end encryption at rest and in transit",
         },
         "constraints": {
-            "budget": "Enterprise monthly subscription",
-            "timeline": "Production deployment within 1-2 months",
-            "technical_preferences": "REST API and secure cloud or on-premise pipeline",
+            "budget": "Documented in commercial inquiry" if has_budget else "To be confirmed during discovery",
+            "timeline": "Documented in commercial inquiry" if has_timeline else "To be confirmed during discovery",
+            "technical_preferences": "REST API, webhook integration",
             "industry": (research_context or {}).get("industry_vertical", "Enterprise"),
         },
-        "missing_information": [],
+        "missing_information": missing_info,
         "assumptions": [
-            "Input documents are standard digital or high-resolution scanned PDFs",
-            "Client will provide destination schema mappings during onboarding phase",
+            "Customer will provide sample representative inputs during technical onboarding",
+            "Production access credentials and network connectivity provided by customer",
         ],
         "priority_mapping": {
-            "must_have": [fn_reqs[0]] if fn_reqs else ["PDF extraction"],
-            "nice_to_have": ["Custom fine-tuned domain models", "Automated validation confidence scoring"],
+            "must_have": [fn_reqs[0]] if fn_reqs else ["Core capability delivery"],
+            "nice_to_have": fn_reqs[1:] if len(fn_reqs) > 1 else ["Automated confidence scoring"],
         },
     }
