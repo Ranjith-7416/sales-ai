@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
-import { Lead, LeadInput, LeadStatus } from '../types';
+import { Lead, LeadInput, LeadStatus, ResearchResult, RequirementResult, QualificationResult, SolutionMatchingResult, ProposalResult, ReviewerResult } from '../types';
 import {
   Loader,
   AlertCircle,
@@ -194,12 +194,12 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const qualification = lead.result?.qualification || lead.result?.qualification_result || lead.result?.results?.qualification;
-  const research = lead.result?.research || lead.result?.results?.research;
-  const requirements = lead.result?.requirements || lead.result?.requirements_result || lead.result?.results?.requirements;
-  const solution = lead.result?.solution_matching || lead.result?.results?.solution_matching;
-  const proposal = lead.result?.proposal || lead.result?.results?.proposal;
-  const review = lead.result?.reviewer || lead.result?.results?.reviewer;
+  const qualification = (lead.result?.qualification || lead.result?.qualification_result || (lead as any).qualification_result || lead.result?.results?.qualification) as QualificationResult | undefined;
+  const research = (lead.result?.research || lead.result?.research_result || (lead as any).research_result || lead.result?.results?.research) as ResearchResult | undefined;
+  const requirements = (lead.result?.requirements || lead.result?.requirements_result || (lead as any).requirements_result || lead.result?.results?.requirements) as RequirementResult | undefined;
+  const solution = (lead.result?.solution_matching || lead.result?.solution_matching_result || (lead as any).solution_matching_result || lead.result?.results?.solution_matching) as SolutionMatchingResult | undefined;
+  const proposal = (lead.result?.proposal || lead.result?.proposal_result || (lead as any).proposal_result || lead.result?.results?.proposal) as ProposalResult | undefined;
+  const review = (lead.result?.reviewer || lead.result?.reviewer_result || (lead as any).reviewer_result || lead.result?.results?.reviewer) as ReviewerResult | undefined;
 
   const getStatusBadge = (status: string) => {
     switch (status) {

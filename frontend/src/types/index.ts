@@ -164,20 +164,30 @@ export interface ReviewerResult {
 
 export interface QualificationResultFull {
   research?: ResearchResult;
+  research_result?: ResearchResult;
   requirements?: RequirementResult;
   requirements_result?: RequirementResult;
   qualification?: QualificationResult;
   qualification_result?: QualificationResult;
   solution_matching?: SolutionMatchingResult;
+  solution_matching_result?: SolutionMatchingResult;
   proposal?: ProposalResult;
+  proposal_result?: ProposalResult;
   reviewer?: ReviewerResult;
+  reviewer_result?: ReviewerResult;
   results?: {
     research?: ResearchResult;
+    research_result?: ResearchResult;
     requirements?: RequirementResult;
+    requirements_result?: RequirementResult;
     qualification?: QualificationResult;
+    qualification_result?: QualificationResult;
     solution_matching?: SolutionMatchingResult;
+    solution_matching_result?: SolutionMatchingResult;
     proposal?: ProposalResult;
+    proposal_result?: ProposalResult;
     reviewer?: ReviewerResult;
+    reviewer_result?: ReviewerResult;
   };
 }
 
