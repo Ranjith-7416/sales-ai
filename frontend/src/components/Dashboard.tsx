@@ -31,6 +31,7 @@ import {
   Activity,
   Layers,
   FileDown,
+  ExternalLink,
 } from 'lucide-react';
 
 // Radial SVG Gauge for Lead Qualification Score
@@ -1146,6 +1147,14 @@ const Dashboard: React.FC = () => {
                     >
                       <Mail size={14} /> Send to Client
                     </button>
+                    <a
+                      href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    >
+                      <ExternalLink size={13} /> Preview Email
+                    </a>
                   </div>
                 </div>
 
@@ -1331,6 +1340,14 @@ const Dashboard: React.FC = () => {
                     >
                       <Mail size={14} /> Send to Client
                     </button>
+                    <a
+                      href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    >
+                      <ExternalLink size={13} /> Preview Email
+                    </a>
                   </div>
                 </div>
 
@@ -1458,21 +1475,45 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs text-slate-300 font-medium">Client Recipient Email</label>
-              <input
-                type="email"
-                value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
-                placeholder="client@company.com"
-                className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-300 font-medium">Client Recipient Email</label>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  placeholder="client@company.com"
+                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
+                />
+              </div>
+
+              {/* Client Email Preview & Sign-off Portal Banner */}
+              <div className="p-3 bg-slate-800/60 rounded-xl border border-white/[0.08] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-indigo-400" />
+                    Interactive Customer Portal
+                  </span>
+                  <a
+                    href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
+                  >
+                    <ExternalLink size={11} /> Preview HTML Email
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Email includes an interactive <span className="text-emerald-400 font-semibold">✓ Accept Proposal &amp; Confirm Kickoff</span> button that marks deals Qualified and reserves onboarding slots.
+                </p>
+              </div>
+
               <p className="text-[11px] text-slate-400">
-                The verified proposal, grounded pricing, and implementation roadmap will be dispatched and registered in the database audit log.
+                Dispatches to client and registers receipt in the audit log. Live inbox delivery is active when SMTP is configured.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
               <button
                 type="button"
                 onClick={() => setShowSendModal(false)}

@@ -244,6 +244,44 @@ export const useApi = () => {
     }
   }, []);
 
+  const getSmtpConfig = useCallback(async () => {
+    try {
+      const response = await apiClient.get('/config/smtp');
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      return { configured: false };
+    }
+  }, []);
+
+  const updateSmtpConfig = useCallback(async (smtpConfig: any) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.post('/config/smtp', smtpConfig);
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const acceptProposal = useCallback(async (leadId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.post(`/proposals/${leadId}/accept`);
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return useMemo(() => ({
     loading,
     error,
@@ -262,6 +300,9 @@ export const useApi = () => {
     getProducts,
     getServices,
     searchKnowledgeBase,
+    getSmtpConfig,
+    updateSmtpConfig,
+    acceptProposal,
   }), [
     loading,
     error,
@@ -280,6 +321,9 @@ export const useApi = () => {
     getProducts,
     getServices,
     searchKnowledgeBase,
+    getSmtpConfig,
+    updateSmtpConfig,
+    acceptProposal,
   ]);
 };
 

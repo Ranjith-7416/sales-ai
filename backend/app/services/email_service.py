@@ -15,12 +15,15 @@ def build_proposal_email_content(
     recipient_email: str,
     company_name: str,
     proposal_data: Dict[str, Any],
+    lead_id: str = "",
+    base_url: str = "http://localhost:8001",
 ) -> tuple[str, str]:
     """Build plain-text and HTML versions of the proposal email."""
     title = proposal_data.get("title", f"Enterprise Solution Proposal for {company_name}")
     summary = proposal_data.get("executive_summary", "Enterprise solution tailored to your operational specifications.")
     solution = proposal_data.get("proposed_solution", "Comprehensive AI enterprise capability architecture.")
     timeline = proposal_data.get("total_implementation_timeline", "2-4 weeks")
+    accept_url = f"{base_url.rstrip('/')}/api/proposals/{lead_id}/accept" if lead_id else f"/api/proposals/accept"
     
     # Requirements
     reqs = proposal_data.get("customer_requirements", [])
@@ -71,7 +74,9 @@ Estimated Duration: {timeline}
 6. RECOMMENDED NEXT STEPS
 {steps_text}
 
-For full documentation and agreement execution, our enterprise team is standing by.
+ACCEPTANCE & ONBOARDING:
+To accept this proposal and confirm technical kickoff:
+{accept_url}
 
 Best regards,
 Sales AI Solutions Team
@@ -153,10 +158,13 @@ sales@salesai-platform.com
 
       <!-- Call to action button -->
       <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-        <a href="mailto:{settings.SMTP_FROM_EMAIL}?subject=Acceptance%20-%20{title}" 
-           style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-size: 13px; font-weight: 700; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">
-          Accept & Schedule Kickoff
+        <a href="{accept_url}" target="_blank"
+           style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 10px; font-size: 14px; font-weight: 700; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.25); letter-spacing: 0.01em;">
+          ✓ Accept &amp; Schedule Kickoff
         </a>
+        <p style="margin: 10px 0 0 0; font-size: 11px; color: #64748b;">
+          Clicking above will confirm agreement terms and schedule technical onboarding.
+        </p>
       </div>
 
     </div>
@@ -178,6 +186,7 @@ def dispatch_proposal_email(
     recipient_email: str,
     company_name: str,
     proposal_data: Dict[str, Any],
+    lead_id: str = "",
 ) -> Dict[str, Any]:
     """
     Dispatch proposal email to client.
@@ -191,6 +200,7 @@ def dispatch_proposal_email(
         recipient_email=recipient_email,
         company_name=company_name,
         proposal_data=proposal_data,
+        lead_id=lead_id,
     )
 
     # Check if SMTP configuration is active

@@ -353,3 +353,96 @@ def test_proposal_approval_and_send_workflows(client):
         db.close()
 
 
+def test_proposal_email_view_and_accept_portal(client):
+    """Verify email-view renders interactive accept link and /accept route updates DB to Qualified & accepted."""
+    db = db_module.SessionLocal()
+    lead_id = "test-email-accept-portal"
+    try:
+        lead = Lead(
+            id=lead_id,
+            company_name="Acme Fintech",
+            inquiry_text="Need high speed document extraction pipeline.",
+            lead_status="Needs More Information",
+            composite_score=80.0,
+            completed_at=datetime.utcnow(),
+            proposal_result={
+                "title": "Enterprise Solution Proposal for Acme Fintech",
+                "executive_summary": "High speed extraction pipeline with OCR.",
+                "proposed_solution": "DocumentAI Pro Enterprise",
+                "total_implementation_timeline": "3 weeks",
+                "pricing_proposal": {"license": "$6,000/mo"},
+                "proposal_status": "sent",
+            },
+        )
+        db.merge(lead)
+        db.commit()
+    finally:
+        db.close()
+
+    # 1. Test /email-view renders interactive link (not dead mailto)
+    view_res = client.get(f"/api/proposals/{lead_id}/email-view")
+    assert view_res.status_code == 200
+    html_body = view_res.text
+    assert f"/api/proposals/{lead_id}/accept" in html_body
+    assert "Accept &amp; Schedule Kickoff" in html_body or "Accept & Schedule Kickoff" in html_body
+    assert f"mailto:{settings.SMTP_FROM_EMAIL}" not in html_body
+
+    # 2. Test GET /{lead_id}/accept (client clicks button)
+    accept_res = client.get(f"/api/proposals/{lead_id}/accept")
+    assert accept_res.status_code == 200
+    accept_html = accept_res.text
+    assert "Proposal Accepted!" in accept_html
+    assert "Acme Fintech" in accept_html
+    assert "Qualified &amp; In Provisioning" in accept_html or "Qualified" in accept_html
+
+    # 3. Verify lead and proposal status updated in database
+    db = db_module.SessionLocal()
+    try:
+        updated = db.query(Lead).filter(Lead.id == lead_id).first()
+        assert updated.lead_status == "Qualified"
+        assert updated.proposal_result["status"] == "accepted"
+        assert updated.proposal_result["accepted_at"] is not None
+
+        prop_rec = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+        assert prop_rec is not None
+        assert prop_rec.status == "accepted"
+    finally:
+        db.close()
+
+    # 4. Test programmatic POST /{lead_id}/accept
+    post_res = client.post(f"/api/proposals/{lead_id}/accept")
+    assert post_res.status_code == 200
+    assert post_res.json()["status"] == "accepted"
+
+
+def test_smtp_configuration_endpoints(client):
+    """Verify dynamic SMTP config endpoints retrieve and update credentials."""
+    # 1. GET /api/config/smtp
+    get_res = client.get("/api/config/smtp")
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert "configured" in get_data
+    assert "smtp_host" in get_data
+    assert "smtp_port" in get_data
+
+    # 2. POST /api/config/smtp
+    post_res = client.post(
+        "/api/config/smtp",
+        json={
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 587,
+            "smtp_user": "demo_sender@gmail.com",
+            "smtp_password": "testapppassword123",
+            "smtp_from_email": "demo_sender@gmail.com",
+            "smtp_use_tls": True,
+        },
+    )
+    assert post_res.status_code == 200
+    post_data = post_res.json()
+    assert post_data["configured"] is True
+    assert post_data["smtp_user"] == "demo_sender@gmail.com"
+    assert settings.SMTP_USER == "demo_sender@gmail.com"
+    assert settings.SMTP_PASSWORD == "testapppassword123"
+
+
+
