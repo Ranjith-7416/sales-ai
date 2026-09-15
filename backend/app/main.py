@@ -1,8 +1,8 @@
 """FastAPI Main Application"""
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, BackgroundTasks, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from contextlib import asynccontextmanager
 import logging
 import uuid
@@ -84,15 +84,170 @@ async def configuration_status():
 
 
 @app.get("/")
-async def api_root():
-    """Return useful entry points when the backend base URL is opened directly."""
+async def api_root(request: Request):
+    """Return an interactive Developer Control Center when opened in browser, or JSON for API clients."""
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales AI - Backend Control Center</title>
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0b0f19; color: #f8fafc; min-height: 100vh; padding: 40px 20px; }}
+    .container {{ max-width: 980px; margin: 0 auto; }}
+    .header {{ display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 28px; flex-wrap: wrap; gap: 16px; }}
+    .title-group {{ display: flex; align-items: center; gap: 14px; }}
+    .logo-badge {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; box-shadow: 0 8px 16px rgba(79, 70, 229, 0.3); }}
+    .title {{ font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }}
+    .subtitle {{ font-size: 13px; color: #94a3b8; margin-top: 2px; }}
+    .status-pill {{ display: inline-flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); color: #34d399; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 9999px; }}
+    .dot {{ width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite; }}
+    @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
+    .grid-3 {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 28px; }}
+    .card {{ background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; }}
+    .card-label {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 6px; }}
+    .card-val {{ font-size: 15px; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 8px; }}
+    .btn-group {{ display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 32px; }}
+    .btn {{ display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border-radius: 10px; font-size: 13px; font-weight: 700; text-decoration: none; transition: all 0.2s; cursor: pointer; }}
+    .btn-primary {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3); }}
+    .btn-primary:hover {{ opacity: 0.95; transform: translateY(-1px); }}
+    .btn-secondary {{ background: #1e293b; color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); }}
+    .btn-secondary:hover {{ background: #334155; }}
+    .btn-success {{ background: #059669; color: white; }}
+    .btn-success:hover {{ background: #10b981; }}
+    .section-title {{ font-size: 15px; font-weight: 700; color: #e2e8f0; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }}
+    .endpoint-list {{ background: #111827; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; overflow: hidden; margin-bottom: 24px; }}
+    .endpoint-item {{ display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); text-decoration: none; color: inherit; transition: background 0.15s; }}
+    .endpoint-item:last-child {{ border-bottom: none; }}
+    .endpoint-item:hover {{ background: rgba(255,255,255,0.04); }}
+    .left {{ display: flex; align-items: center; }}
+    .method {{ font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.05em; min-width: 52px; text-align: center; }}
+    .method-get {{ background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }}
+    .method-post {{ background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }}
+    .endpoint-path {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; font-weight: 600; color: #f1f5f9; margin-left: 12px; }}
+    .endpoint-desc {{ font-size: 12px; color: #94a3b8; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title-group">
+        <div class="logo-badge">⚡</div>
+        <div>
+          <h1 class="title">{settings.APP_NAME}</h1>
+          <p class="subtitle">Autonomous Multi-Agent Enterprise Sales Qualification &amp; Proposal Platform</p>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span class="dot"></span>
+        FastAPI Online &bull; Port {settings.PORT or 8001}
+      </div>
+    </div>
+
+    <!-- System Stats -->
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-label">Primary Database</div>
+        <div class="card-val" style="color: #60a5fa;">
+          <span>🐘</span> PostgreSQL 18 (Active)
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">AI Reasoning Engine</div>
+        <div class="card-val" style="color: #c084fc;">
+          <span>🧠</span> Groq (openai/gpt-oss-120b)
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">Frontend Web App</div>
+        <div class="card-val" style="color: #34d399;">
+          <span>💻</span> React &bull; localhost:3000
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Action Buttons -->
+    <div class="btn-group">
+      <a href="/docs" class="btn btn-primary" target="_blank">
+        📘 Interactive Swagger Docs (/docs) &rarr;
+      </a>
+      <a href="/redoc" class="btn btn-secondary" target="_blank">
+        📖 ReDoc API Spec (/redoc)
+      </a>
+      <a href="http://localhost:3000" class="btn btn-success" target="_blank">
+        🚀 Launch Frontend Workspace (localhost:3000)
+      </a>
+    </div>
+
+    <!-- Core API Endpoints -->
+    <div class="section-title">
+      <span>📡</span> Core API Endpoints &amp; Routes
+    </div>
+    <div class="endpoint-list">
+      <a href="/api/leads" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/api/leads</span>
+        </div>
+        <span class="endpoint-desc">List all qualified leads with composite scores and requirements</span>
+      </a>
+      <a href="/api/config/scoring" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/api/config/scoring</span>
+        </div>
+        <span class="endpoint-desc">View lead qualification scoring criteria, weights and formula</span>
+      </a>
+      <a href="/api/knowledge-base/products" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/api/knowledge-base/products</span>
+        </div>
+        <span class="endpoint-desc">View verified enterprise products catalog for RAG grounding</span>
+      </a>
+      <a href="/api/knowledge-base/services" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/api/knowledge-base/services</span>
+        </div>
+        <span class="endpoint-desc">View enterprise services catalog and pricing tiers</span>
+      </a>
+      <a href="/api/config/smtp" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/api/config/smtp</span>
+        </div>
+        <span class="endpoint-desc">Inspect SMTP email delivery credentials and status</span>
+      </a>
+      <a href="/health" target="_blank" class="endpoint-item">
+        <div class="left">
+          <span class="method method-get">GET</span>
+          <span class="endpoint-path">/health</span>
+        </div>
+        <span class="endpoint-desc">Backend health probe &amp; uptime status</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
+"""
+        return HTMLResponse(content=html)
+
     return {
         "app": settings.APP_NAME,
         "status": "running",
-        "frontend": "http://localhost:5173",
+        "version": settings.APP_VERSION,
+        "frontend": "http://localhost:3000",
         "docs": "/docs",
+        "redoc": "/redoc",
         "health": "/health",
         "lead_api": "/api/leads",
+        "proposals_api": "/api/proposals",
+        "scoring_config": "/api/config/scoring",
+        "knowledge_base": "/api/knowledge-base/products",
     }
 
 
