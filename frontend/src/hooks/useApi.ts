@@ -137,14 +137,16 @@ export const useApi = () => {
     }
   }, []);
 
-  const approveProposal = useCallback(async (leadId: string, approvedBy: string) => {
+  const approveProposal = useCallback(async (leadId: string, approvedBy: string = 'Sales AI Reviewer') => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await apiClient.post(`/proposals/${leadId}/approve`, {
-        approved_by: approvedBy,
-      });
+      const response = await apiClient.post(
+        `/proposals/${leadId}/approve`,
+        { approved_by: approvedBy },
+        { params: { approved_by: approvedBy } }
+      );
       return response.data;
     } catch (err) {
       handleError(err as AxiosError);
@@ -159,9 +161,11 @@ export const useApi = () => {
     setError(null);
 
     try {
-      const response = await apiClient.post(`/proposals/${leadId}/send`, {
-        recipient_email: email,
-      });
+      const response = await apiClient.post(
+        `/proposals/${leadId}/send`,
+        { recipient_email: email },
+        { params: { recipient_email: email } }
+      );
       return response.data;
     } catch (err) {
       handleError(err as AxiosError);

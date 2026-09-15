@@ -97,6 +97,13 @@ const Dashboard: React.FC = () => {
   const [approving, setApproving] = useState(false);
   const [approvedSuccess, setApprovedSuccess] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [proposalNotification, setProposalNotification] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
 
   const api = useApi();
 
@@ -110,6 +117,12 @@ const Dashboard: React.FC = () => {
         const data = await api.getLead(leadId);
         if (!isMounted) return;
         setLead(data);
+        if (
+          data.proposal_result?.proposal_status === 'approved' ||
+          data.proposal_result?.status === 'approved'
+        ) {
+          setApprovedSuccess(true);
+        }
 
         // Poll if still processing
         if (data.status !== 'completed') {
@@ -118,6 +131,12 @@ const Dashboard: React.FC = () => {
               const updated = await api.getLead(leadId);
               if (!isMounted) return;
               setLead(updated);
+              if (
+                updated.proposal_result?.proposal_status === 'approved' ||
+                updated.proposal_result?.status === 'approved'
+              ) {
+                setApprovedSuccess(true);
+              }
               if (updated.status === 'completed') {
                 clearInterval(interval);
               }
@@ -295,16 +314,110 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const isProposalApproved =
+    approvedSuccess ||
+    lead?.proposal_result?.proposal_status === 'approved' ||
+    lead?.proposal_result?.status === 'approved';
+
+  const getErrorMessage = (err: any, fallback: string): string => {
+    if (!err) return fallback;
+    const detail = err?.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item: any) => (typeof item === 'string' ? item : item?.msg || item?.message || JSON.stringify(item)))
+        .join(', ');
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.message || detail.msg || JSON.stringify(detail);
+    }
+    return err?.message || fallback;
+  };
+
   const handleApproveProposal = async () => {
     if (!leadId) return;
     setApproving(true);
+    setProposalNotification(null);
     try {
       await api.approveProposal(leadId, 'Sales AI Reviewer');
       setApprovedSuccess(true);
-    } catch (err) {
+
+      // Instantly update local state
+      setLead((prev) => {
+        if (!prev) return prev;
+        const updatedProposal = prev.proposal_result
+          ? {
+              ...prev.proposal_result,
+              proposal_status: 'approved',
+              status: 'approved',
+              approved_by: 'Sales AI Reviewer',
+              approved_at: new Date().toISOString(),
+            }
+          : prev.proposal_result;
+
+        return {
+          ...prev,
+          lead_status:
+            prev.lead_status === 'Low Priority' || prev.lead_status === 'Needs More Information'
+              ? 'Qualified'
+              : prev.lead_status,
+          proposal_result: updatedProposal,
+        };
+      });
+
+      setProposalNotification({
+        type: 'success',
+        message: '🎉 Proposal approved successfully! Recorded in database and ready for client delivery.',
+      });
+    } catch (err: any) {
       console.error('Approval failed:', err);
+      const errMsg = getErrorMessage(err, 'Failed to approve proposal');
+      setProposalNotification({
+        type: 'error',
+        message: `Failed to approve proposal: ${errMsg}`,
+      });
     } finally {
       setApproving(false);
+    }
+  };
+
+  const handleSendProposal = async () => {
+    const target = (recipientEmail || '').trim();
+    if (!leadId || !target) return;
+    setSendingEmail(true);
+    setProposalNotification(null);
+    try {
+      const res = await api.sendProposal(leadId, target);
+      setProposalNotification({
+        type: 'success',
+        message: `📧 Proposal successfully dispatched to ${target}! ${res?.delivery_mode === 'smtp_live' ? 'Live email delivered.' : 'Recorded in dispatch audit log.'}`,
+      });
+      setShowSendModal(false);
+      setLead((prev) => {
+        if (!prev) return prev;
+        const updatedProposal = prev.proposal_result
+          ? {
+              ...prev.proposal_result,
+              proposal_status: 'sent',
+              status: 'sent',
+              sent_to: target,
+              sent_at: new Date().toISOString(),
+            }
+          : prev.proposal_result;
+        return {
+          ...prev,
+          proposal_result: updatedProposal,
+        };
+      });
+    } catch (err: any) {
+      console.error('Send failed:', err);
+      const errMsg = getErrorMessage(err, 'Failed to send proposal. Please try again.');
+      setProposalNotification({
+        type: 'error',
+        message: `Sending note: ${errMsg}`,
+      });
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -972,11 +1085,17 @@ const Dashboard: React.FC = () => {
                 <div className="glass-card p-4 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Status:</span>
-                    <span className="text-xs bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full font-bold">
-                      Grounded Draft Ready
+                    <span
+                      className={`text-xs px-3 py-1 rounded-full font-bold border transition ${
+                        isProposalApproved
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
+                          : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                      }`}
+                    >
+                      {isProposalApproved ? 'Approved & Ready for Delivery ✓' : 'Grounded Draft Ready'}
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={handleExportProposal}
@@ -995,17 +1114,71 @@ const Dashboard: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleApproveProposal}
-                      disabled={approving || approvedSuccess}
+                      disabled={approving || isProposalApproved}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
-                        approvedSuccess
+                        isProposalApproved
                           ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/50 cursor-default'
                           : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 shadow-lg shadow-emerald-500/20'
                       }`}
                     >
-                      <Check size={14} /> {approvedSuccess ? 'Approved ✓' : approving ? 'Approving...' : 'Approve Proposal'}
+                      {approving ? (
+                        <>
+                          <Loader size={14} className="animate-spin text-white" /> Approving...
+                        </>
+                      ) : isProposalApproved ? (
+                        <>
+                          <Check size={14} /> Approved ✓
+                        </>
+                      ) : (
+                        <>
+                          <Check size={14} /> Approve Proposal
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultEmail = lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
+                        setRecipientEmail(defaultEmail);
+                        setShowSendModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
+                    >
+                      <Mail size={14} /> Send to Client
                     </button>
                   </div>
                 </div>
+
+                {/* Proposal Notification Toast / Banner */}
+                {proposalNotification && (
+                  <div
+                    className={`p-3.5 rounded-xl border flex items-center justify-between text-xs transition-all duration-200 animate-in fade-in slide-in-from-top-2 ${
+                      proposalNotification.type === 'success'
+                        ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200 shadow-lg shadow-emerald-900/20'
+                        : proposalNotification.type === 'error'
+                        ? 'bg-rose-950/70 border-rose-500/40 text-rose-200 shadow-lg shadow-rose-900/20'
+                        : 'bg-blue-950/70 border-blue-500/40 text-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 font-medium">
+                      {proposalNotification.type === 'success' ? (
+                        <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                      ) : proposalNotification.type === 'error' ? (
+                        <AlertCircle size={16} className="text-rose-400 shrink-0" />
+                      ) : (
+                        <Sparkles size={16} className="text-blue-400 shrink-0" />
+                      )}
+                      <span>{proposalNotification.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProposalNotification(null)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg transition"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
                 {/* Proposal Content Body */}
                 <div className="glass-card p-6 sm:p-8 rounded-2xl border border-white/[0.08] space-y-6">
@@ -1112,19 +1285,85 @@ const Dashboard: React.FC = () => {
           <div className="space-y-6">
             {review ? (
               <>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <ShieldCheck size={18} className="text-cyan-400" />
-                    Quality Assurance & Anti-Hallucination Review
-                  </h2>
-                  <span className={`text-xs px-3 py-1 rounded-full font-bold border backdrop-blur-md ${
-                    review.readiness_assessment?.ready_to_send
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                  }`}>
-                    {review.readiness_assessment?.ready_to_send ? 'Ready for Customer Sign-off' : 'Requires Human Review'}
-                  </span>
+                <div className="glass-card p-4 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <ShieldCheck size={18} className="text-cyan-400" />
+                      Quality Assurance & Anti-Hallucination Review
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Automated quality assurance against enterprise catalog grounding</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleApproveProposal}
+                      disabled={approving || isProposalApproved}
+                      className={`text-xs px-3.5 py-1.5 rounded-full font-bold border transition flex items-center gap-1.5 ${
+                        isProposalApproved
+                          ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50 cursor-default'
+                          : review.readiness_assessment?.ready_to_send
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 shadow-lg shadow-emerald-500/20'
+                          : 'bg-amber-600 hover:bg-amber-500 text-white cursor-pointer active:scale-95 shadow-lg shadow-amber-500/20'
+                      }`}
+                    >
+                      {approving ? (
+                        <>
+                          <Loader size={14} className="animate-spin text-white" /> Approving...
+                        </>
+                      ) : isProposalApproved ? (
+                        <>
+                          <Check size={14} /> Signed Off & Approved ✓
+                        </>
+                      ) : (
+                        <>
+                          <Check size={14} /> {review.readiness_assessment?.ready_to_send ? 'Ready for Customer Sign-off (Click to Approve)' : 'Approve & Sign Off'}
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultEmail = lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
+                        setRecipientEmail(defaultEmail);
+                        setShowSendModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
+                    >
+                      <Mail size={14} /> Send to Client
+                    </button>
+                  </div>
                 </div>
+
+                {/* Review Notification Toast / Banner */}
+                {proposalNotification && (
+                  <div
+                    className={`p-3.5 rounded-xl border flex items-center justify-between text-xs transition-all duration-200 animate-in fade-in slide-in-from-top-2 ${
+                      proposalNotification.type === 'success'
+                        ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-200 shadow-lg shadow-emerald-900/20'
+                        : proposalNotification.type === 'error'
+                        ? 'bg-rose-950/70 border-rose-500/40 text-rose-200 shadow-lg shadow-rose-900/20'
+                        : 'bg-blue-950/70 border-blue-500/40 text-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 font-medium">
+                      {proposalNotification.type === 'success' ? (
+                        <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                      ) : proposalNotification.type === 'error' ? (
+                        <AlertCircle size={16} className="text-rose-400 shrink-0" />
+                      ) : (
+                        <Sparkles size={16} className="text-blue-400 shrink-0" />
+                      )}
+                      <span>{proposalNotification.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProposalNotification(null)}
+                      className="text-slate-400 hover:text-white p-1 rounded-lg transition"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
 
                 {/* Follow-up Questions */}
                 {review.follow_up_questions && review.follow_up_questions.length > 0 && (
@@ -1200,8 +1439,63 @@ const Dashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Send Proposal Modal */}
+      {showSendModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel border border-white/[0.15] bg-slate-900/95 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Mail size={16} className="text-indigo-400" />
+                Transmit Proposal to Client
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSendModal(false)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-300 font-medium">Client Recipient Email</label>
+              <input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                placeholder="client@company.com"
+                className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+              <p className="text-[11px] text-slate-400">
+                The verified proposal, grounded pricing, and implementation roadmap will be dispatched and registered in the database audit log.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSendModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendProposal}
+                disabled={sendingEmail || !recipientEmail}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
+              >
+                {sendingEmail ? <Loader size={14} className="animate-spin text-white" /> : <Mail size={14} />}
+                {sendingEmail ? 'Transmitting...' : 'Confirm & Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default Dashboard;
+

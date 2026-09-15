@@ -283,3 +283,73 @@ def test_twelve_required_deliverables_structure(client):
     assert "missing_information" in matched
     assert len(matched["missing_information"]) == 2
 
+
+def test_proposal_approval_and_send_workflows(client):
+    """Verify proposal approve (via JSON body) and send endpoints update DB and lead status correctly."""
+    db = db_module.SessionLocal()
+    lead_id = "test-approve-lead"
+    try:
+        test_lead = Lead(
+            id=lead_id,
+            company_name="Approval Corp",
+            inquiry_text="Need AI extraction for invoices and documents.",
+            lead_status="Needs More Information",
+            composite_score=78.0,
+            completed_at=datetime.utcnow(),
+            proposal_result={
+                "title": "Enterprise Solution Proposal for Approval Corp",
+                "executive_summary": "Summary text",
+                "proposal_status": "draft",
+            },
+        )
+        db.merge(test_lead)
+        db.commit()
+    finally:
+        db.close()
+
+    # 1. Approve via JSON Body (matching frontend Axios call)
+    approve_res = client.post(
+        f"/api/proposals/{lead_id}/approve",
+        json={"approved_by": "Sales Director Jane"},
+    )
+    assert approve_res.status_code == 200
+    approve_data = approve_res.json()
+    assert approve_data["status"] == "approved"
+    assert approve_data["approved_by"] == "Sales Director Jane"
+    assert "Proposal approved successfully" in approve_data["message"]
+
+    # Verify DB Lead and Proposal records
+    db = db_module.SessionLocal()
+    try:
+        updated_lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        assert updated_lead.lead_status == "Qualified"  # Promoted from Needs More Information on approval
+        assert updated_lead.proposal_result["proposal_status"] == "approved"
+        assert updated_lead.proposal_result["approved_by"] == "Sales Director Jane"
+
+        prop_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+        assert prop_record is not None
+        assert prop_record.status == "approved"
+        assert prop_record.approved_by == "Sales Director Jane"
+    finally:
+        db.close()
+
+    # 2. Send via JSON Body
+    send_res = client.post(
+        f"/api/proposals/{lead_id}/send",
+        json={"recipient_email": "jane@approvalcorp.com"},
+    )
+    assert send_res.status_code == 200
+    send_data = send_res.json()
+    assert send_data["status"] == "sent"
+    assert send_data["recipient"] == "jane@approvalcorp.com"
+
+    db = db_module.SessionLocal()
+    try:
+        prop_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+        assert prop_record.status == "sent"
+        assert prop_record.sent_to == "jane@approvalcorp.com"
+        assert prop_record.sent_at is not None
+    finally:
+        db.close()
+
+

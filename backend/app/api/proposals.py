@@ -1,5 +1,5 @@
 """Proposals API Routes"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -10,10 +10,20 @@ import uuid
 import logging
 from io import BytesIO
 import json
+from pydantic import BaseModel, Field
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ProposalApprovalRequest(BaseModel):
+    approved_by: Optional[str] = Field(default="Sales AI Reviewer", description="Name or role of reviewer approving the proposal")
+
+
+class ProposalSendRequest(BaseModel):
+    recipient_email: Optional[str] = Field(default=None, description="Recipient email address")
 
 
 @router.get("/{lead_id}")
@@ -28,10 +38,16 @@ async def get_proposal(lead_id: str, db: Session = Depends(get_db)):
         if not lead.proposal_result:
             raise HTTPException(status_code=404, detail="No proposal generated yet")
         
+        # Determine proposal status from lead or proposal record
+        proposal_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).order_by(Proposal.created_at.desc()).first()
+        status = proposal_record.status if proposal_record else lead.proposal_result.get("proposal_status", "draft")
+
         return {
             "lead_id": lead_id,
             "proposal": lead.proposal_result,
-            "status": "draft",
+            "status": status,
+            "approved_by": proposal_record.approved_by if proposal_record else lead.proposal_result.get("approved_by"),
+            "approved_at": proposal_record.approved_at if proposal_record else lead.proposal_result.get("approved_at"),
             "created_at": lead.updated_at,
         }
     
@@ -45,10 +61,11 @@ async def get_proposal(lead_id: str, db: Session = Depends(get_db)):
 @router.post("/{lead_id}/approve", dependencies=[Depends(require_auth), Depends(rate_limit("RATE_LIMIT_PROPOSAL_REQUESTS"))])
 async def approve_proposal(
     lead_id: str,
-    approved_by: str,
+    payload: Optional[ProposalApprovalRequest] = Body(None),
+    approved_by: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """Approve a proposal"""
+    """Approve a proposal (supports JSON body or query param)"""
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         
@@ -57,69 +74,157 @@ async def approve_proposal(
         
         if not lead.proposal_result:
             raise HTTPException(status_code=404, detail="No proposal to approve")
+
+        # Resolve approved_by from body payload, query parameter, or default
+        effective_approved_by = "Sales AI Reviewer"
+        if payload and payload.approved_by:
+            effective_approved_by = payload.approved_by
+        elif approved_by:
+            effective_approved_by = approved_by
         
-        # Create proposal record
-        proposal = Proposal(
-            id=str(uuid.uuid4()),
-            lead_id=lead_id,
-            proposal_markdown=json.dumps(lead.proposal_result, indent=2),
-            status="approved",
-            approved_by=approved_by,
-            approved_at=datetime.utcnow(),
-        )
-        db.add(proposal)
+        now = datetime.utcnow()
+
+        # Find or create Proposal record
+        proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+        if not proposal:
+            proposal = Proposal(
+                id=str(uuid.uuid4()),
+                lead_id=lead_id,
+                proposal_markdown=json.dumps(lead.proposal_result, indent=2),
+                status="approved",
+                approved_by=effective_approved_by,
+                approved_at=now,
+            )
+            db.add(proposal)
+        else:
+            proposal.status = "approved"
+            proposal.approved_by = effective_approved_by
+            proposal.approved_at = now
+            proposal.proposal_markdown = json.dumps(lead.proposal_result, indent=2)
+
+        # Update lead's proposal_result JSON and lead_status
+        if isinstance(lead.proposal_result, dict):
+            updated_prop = dict(lead.proposal_result)
+            updated_prop["proposal_status"] = "approved"
+            updated_prop["status"] = "approved"
+            updated_prop["approved_by"] = effective_approved_by
+            updated_prop["approved_at"] = now.isoformat()
+            lead.proposal_result = updated_prop
+        
+        # When human approves, promote status to Qualified if it was pending or info needed
+        if lead.lead_status in ["Needs More Information", "Low Priority", "Under Review", "Pending Review"]:
+            lead.lead_status = "Qualified"
+
+        lead.updated_at = now
         db.commit()
+        db.refresh(lead)
         
-        logger.info(f"Proposal approved for lead {lead_id} by {approved_by}")
+        logger.info(f"Proposal approved for lead {lead_id} by {effective_approved_by}")
         
         return {
-            "message": "Proposal approved",
+            "message": "Proposal approved successfully",
             "lead_id": lead_id,
-            "approved_at": datetime.utcnow(),
+            "status": "approved",
+            "approved_by": effective_approved_by,
+            "approved_at": now.isoformat(),
+            "proposal": lead.proposal_result,
         }
     
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error approving proposal: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+from app.services.email_service import dispatch_proposal_email
 
 
 @router.post("/{lead_id}/send", dependencies=[Depends(require_auth), Depends(rate_limit("RATE_LIMIT_PROPOSAL_REQUESTS"))])
 async def send_proposal(
     lead_id: str,
-    recipient_email: str,
+    payload: Optional[ProposalSendRequest] = Body(None),
+    recipient_email: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """Send proposal to customer"""
+    """Send proposal to customer (supports live SMTP delivery or audit-logged dispatch)"""
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
+        target_email = None
+        if payload and payload.recipient_email:
+            target_email = payload.recipient_email.strip()
+        elif recipient_email:
+            target_email = recipient_email.strip()
+        elif lead.email:
+            target_email = lead.email.strip()
+
+        if not target_email:
+            raise HTTPException(status_code=400, detail="recipient_email is required")
+
+        # Fallback if proposal_result is in pipeline_result
+        if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
+            lead.proposal_result = lead.pipeline_result.get("proposal")
+
+        now = datetime.utcnow()
         proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
         
         if not proposal:
-            raise HTTPException(status_code=404, detail="No approved proposal to send")
-        
-        # Update proposal status
-        proposal.status = "sent"
-        proposal.sent_to = recipient_email
-        proposal.sent_at = datetime.utcnow()
+            proposal = Proposal(
+                id=str(uuid.uuid4()),
+                lead_id=lead_id,
+                proposal_markdown=json.dumps(lead.proposal_result or {}, indent=2),
+                status="sent",
+                sent_to=target_email,
+                sent_at=now,
+            )
+            db.add(proposal)
+        else:
+            proposal.status = "sent"
+            proposal.sent_to = target_email
+            proposal.sent_at = now
+
+        # Dispatch real email via SMTP service or record in audit queue
+        email_result = dispatch_proposal_email(
+            recipient_email=target_email,
+            company_name=lead.company_name or "Valued Client",
+            proposal_data=lead.proposal_result or {},
+        )
+
+        # Update lead proposal result with sent info
+        if isinstance(lead.proposal_result, dict):
+            updated_prop = dict(lead.proposal_result)
+            updated_prop["proposal_status"] = "sent"
+            updated_prop["status"] = "sent"
+            updated_prop["sent_to"] = target_email
+            updated_prop["sent_at"] = now.isoformat()
+            updated_prop["delivery_mode"] = email_result.get("delivery_mode", "audit_recorded")
+            lead.proposal_result = updated_prop
+
+        lead.updated_at = now
         db.commit()
+        db.refresh(lead)
         
-        logger.info(f"Proposal sent for lead {lead_id} to {recipient_email}")
+        logger.info(f"Proposal sent for lead {lead_id} to {target_email}: {email_result.get('message')}")
         
         return {
-            "message": "Proposal sent successfully",
-            "recipient": recipient_email,
-            "sent_at": datetime.utcnow(),
+            "message": email_result.get("message", f"Proposal sent successfully to {target_email}"),
+            "lead_id": lead_id,
+            "status": "sent",
+            "recipient": target_email,
+            "delivery_mode": email_result.get("delivery_mode", "audit_recorded"),
+            "sent_at": now.isoformat(),
+            "proposal": lead.proposal_result,
         }
     
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error sending proposal: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 

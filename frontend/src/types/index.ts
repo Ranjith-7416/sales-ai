@@ -31,7 +31,7 @@ export interface Lead {
   budget?: string;
   timeline?: string;
   additional_context?: string;
-  lead_status: LeadStatus;
+  lead_status: LeadStatus | string;
   status: 'queued' | 'processing' | 'completed';
   current_stage?: string;
   stages_completed?: string[];
@@ -40,6 +40,12 @@ export interface Lead {
   missing_information?: string[];
   created_at: string;
   completed_at?: string;
+  proposal_result?: any;
+  research_result?: any;
+  requirements_result?: any;
+  qualification_result?: any;
+  solution_matching_result?: any;
+  reviewer_result?: any;
   result?: QualificationResultFull;
 }
 
