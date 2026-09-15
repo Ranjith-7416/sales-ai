@@ -36,6 +36,8 @@ export interface Lead {
   current_stage?: string;
   stages_completed?: string[];
   composite_score?: number;
+  fit_score?: number;
+  missing_information?: string[];
   created_at: string;
   completed_at?: string;
   result?: QualificationResultFull;

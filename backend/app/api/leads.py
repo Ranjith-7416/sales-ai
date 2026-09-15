@@ -392,6 +392,13 @@ async def list_leads(
                     score,
                     missing_information,
                 )
+
+            fit_score = None
+            if lead.pipeline_result and isinstance(lead.pipeline_result, dict):
+                fit_score = lead.pipeline_result.get("qualification_result", {}).get("fit_score")
+            elif lead.qualification_result and isinstance(lead.qualification_result, dict):
+                fit_score = lead.qualification_result.get("fit_score")
+
             lead_cards.append({
                 "id": lead.id,
                 "company_name": lead.company_name,
@@ -400,6 +407,8 @@ async def list_leads(
                 "inquiry_text": lead.inquiry_text,
                 "lead_status": current_status,
                 "composite_score": score,
+                "fit_score": fit_score,
+                "missing_information": missing_information,
                 "created_at": lead.created_at,
             })
 

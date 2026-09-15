@@ -179,6 +179,19 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
               />
               <p className="text-[11px] text-slate-400 mt-1">Scores below {config.needs_info_threshold} are marked as Low Priority.</p>
             </div>
+
+            {/* Explanatory Rule Callout */}
+            <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-300 leading-relaxed">
+              <div className="font-semibold text-indigo-200 mb-1 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Qualification Status Rules</span>
+              </div>
+              <ul className="space-y-1 text-slate-300">
+                <li><strong className="text-emerald-400">Qualified (&ge; {config.qualified_threshold})</strong>: Requirements are complete and lead score meets or exceeds threshold.</li>
+                <li><strong className="text-amber-400">Needs More Information</strong>: Critical customer data is missing (e.g. budget, timeline, scale) or score is between {config.needs_info_threshold}&ndash;{config.qualified_threshold - 1}.</li>
+                <li><strong className="text-rose-400">Low Priority (&lt; {config.needs_info_threshold})</strong>: Score falls below minimum threshold or inquiry is out-of-scope.</li>
+              </ul>
+            </div>
           </div>
 
           {/* Criteria Weights */}

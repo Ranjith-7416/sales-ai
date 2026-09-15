@@ -270,3 +270,16 @@ def test_twelve_required_deliverables_structure(client):
 
     # Deliverable 12: Grounding Verification
     assert data["result"]["reviewer"]["claim_verification"][0]["verified"] is True
+
+    # Test list_leads returns fit_score and missing_information for the UI cards
+    list_res = client.get("/api/leads")
+    assert list_res.status_code == 200
+    list_data = list_res.json()
+    assert "leads" in list_data
+    matched = next((l for l in list_data["leads"] if l["id"] == lead_id), None)
+    assert matched is not None
+    assert matched["composite_score"] == 86.0
+    assert matched["fit_score"] == 90
+    assert "missing_information" in matched
+    assert len(matched["missing_information"]) == 2
+

@@ -353,20 +353,30 @@ const LeadsList: React.FC = () => {
 
                   {/* Right Column: Score, Status & Actions */}
                   <div className="flex items-center gap-4 justify-between sm:justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.05]">
-                    {/* Status Pill */}
+                    {/* Status Pill & Indicators */}
                     <div className="flex flex-col items-start sm:items-end gap-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${badge.pill}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                        {badge.icon}
-                        <span>{lead.lead_status}</span>
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {lead.lead_status === LeadStatus.NeedsInfo && score !== null && score >= 75 && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/30"
+                            title="Opportunity has high score (>=75) but requires missing commercial information before marking as Qualified"
+                          >
+                            High Fit • Info Needed
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${badge.pill}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                          {badge.icon}
+                          <span>{lead.lead_status}</span>
+                        </span>
+                      </div>
 
                       {/* Score Indicator */}
                       {score !== null && (
                         <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                          <span>Fit Score:</span>
+                          <span>Lead Score:</span>
                           <span
                             className={`font-black ${
                               score >= 75
@@ -378,6 +388,22 @@ const LeadsList: React.FC = () => {
                           >
                             {score}/100
                           </span>
+                          {typeof lead.fit_score === 'number' && (
+                            <span className="text-[10px] text-slate-500 font-mono" title="Product Fit component">
+                              (Fit {Math.round(lead.fit_score)}%)
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Missing info count helper */}
+                      {lead.lead_status === LeadStatus.NeedsInfo && lead.missing_information && lead.missing_information.length > 0 && (
+                        <div
+                          className="text-[10px] text-amber-400/90 flex items-center gap-1 cursor-help"
+                          title={`Missing required customer data: ${lead.missing_information.join(', ')}`}
+                        >
+                          <AlertTriangle size={10} className="text-amber-400" />
+                          <span>{lead.missing_information.length} details missing to qualify</span>
                         </div>
                       )}
                     </div>
