@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -81,6 +82,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   }, []);
 
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    const res = await axios.post<LoginResponse>(`${API_BASE_URL}/auth/register`, {
+      name,
+      email,
+      password,
+    });
+
+    const { access_token, user: userData } = res.data;
+    setToken(access_token);
+    setUser(userData);
+    localStorage.setItem('salesai_token', access_token);
+    localStorage.setItem('salesai_user', JSON.stringify(userData));
+    axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+  }, []);
+
   const logout = useCallback(() => {
     try {
       axios.post(`${API_BASE_URL}/auth/logout`).catch(() => {});
@@ -101,12 +117,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         isAuthenticated: !!token,
         login,
+        register,
         logout,
       }}
     >
       {children}
     </AuthContext.Provider>
   );
+
 };
 
 export const useAuth = () => {

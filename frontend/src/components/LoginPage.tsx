@@ -12,20 +12,28 @@ import {
   CheckCircle2,
   ShieldCheck,
   ArrowRight,
-  Zap,
+  User as UserIcon,
 } from 'lucide-react';
+
+type AuthMode = 'login' | 'register';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { login, register, isAuthenticated, loading: authLoading } = useAuth();
 
+  const [mode, setMode] = useState<AuthMode>('login');
+  
+  // Form fields
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [demoNotice, setDemoNotice] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const destination = (location.state as any)?.from?.pathname || '/';
 
@@ -36,36 +44,72 @@ export const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, authLoading, navigate, destination]);
 
+  const handleModeSwitch = (newMode: AuthMode) => {
+    setMode(newMode);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage('Please enter both email and password.');
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      setErrorMessage('Please provide both email and password.');
       return;
     }
 
-    setSubmitting(true);
-    setErrorMessage(null);
+    if (mode === 'register') {
+      const cleanName = name.trim();
+      if (!cleanName) {
+        setErrorMessage('Please enter your full name.');
+        return;
+      }
+      if (cleanPassword.length < 6) {
+        setErrorMessage('Password must be at least 6 characters long.');
+        return;
+      }
+      if (cleanPassword !== confirmPassword.trim()) {
+        setErrorMessage('Passwords do not match. Please re-enter.');
+        return;
+      }
 
-    try {
-      await login(email.trim(), password.trim());
-      navigate(destination, { replace: true });
-    } catch (err: any) {
-      const msg =
-        err.response?.data?.detail ||
-        err.message ||
-        'Authentication failed. Please check your credentials.';
-      setErrorMessage(msg);
-    } finally {
-      setSubmitting(false);
+      setSubmitting(true);
+      try {
+        await register(cleanName, cleanEmail, cleanPassword);
+        setSuccessMessage('Account created successfully! Entering workspace...');
+        setTimeout(() => {
+          navigate(destination, { replace: true });
+        }, 800);
+      } catch (err: any) {
+        const msg =
+          err.response?.data?.detail ||
+          err.message ||
+          'Failed to create account. Please try again.';
+        setErrorMessage(msg);
+      } finally {
+        setSubmitting(false);
+      }
+    } else {
+      // Login mode
+      setSubmitting(true);
+      try {
+        await login(cleanEmail, cleanPassword);
+        navigate(destination, { replace: true });
+      } catch (err: any) {
+        const msg =
+          err.response?.data?.detail ||
+          err.message ||
+          'Invalid email or password. Please try again.';
+        setErrorMessage(msg);
+      } finally {
+        setSubmitting(false);
+      }
     }
-  };
-
-  const fillDemoAccount = () => {
-    setEmail('admin@salesai.com');
-    setPassword('salesai123');
-    setErrorMessage(null);
-    setDemoNotice('Demo credentials applied! Click "Sign In" to continue.');
-    setTimeout(() => setDemoNotice(null), 4000);
   };
 
   return (
@@ -88,25 +132,35 @@ export const LoginPage: React.FC = () => {
               Welcome to <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Sales AI</span>
             </h1>
             <p className="text-xs text-slate-400">
-              Sign in to manage your autonomous enterprise deal pipeline
+              {mode === 'login'
+                ? 'Sign in to access your enterprise deal intelligence workspace'
+                : 'Create an account to start qualifying leads and closing deals'}
             </p>
           </div>
 
-          {/* Quick Fill Demo Banner */}
-          <div className="p-3 bg-gradient-to-r from-indigo-950/70 to-purple-950/70 border border-indigo-500/30 rounded-2xl flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Zap size={16} className="text-yellow-400 shrink-0" />
-              <div className="text-[11px] leading-tight text-slate-300">
-                <span className="font-semibold text-white block">Evaluator / Demo Access</span>
-                admin@salesai.com • salesai123
-              </div>
-            </div>
+          {/* Mode Tabs */}
+          <div className="p-1 bg-slate-950/80 border border-white/[0.08] rounded-2xl flex items-center gap-1">
             <button
               type="button"
-              onClick={fillDemoAccount}
-              className="px-2.5 py-1 bg-indigo-600/40 hover:bg-indigo-600/70 text-indigo-200 hover:text-white border border-indigo-400/40 rounded-xl text-[10px] font-bold uppercase tracking-wider transition cursor-pointer active:scale-95 whitespace-nowrap"
+              onClick={() => handleModeSwitch('login')}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                mode === 'login'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+              }`}
             >
-              Quick Fill
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeSwitch('register')}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+                mode === 'register'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+              }`}
+            >
+              Create Account
             </button>
           </div>
 
@@ -118,15 +172,37 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          {demoNotice && (
+          {successMessage && (
             <div className="p-3 bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
               <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-              <div>{demoNotice}</div>
+              <div>{successMessage}</div>
             </div>
           )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === 'register' && (
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <UserIcon size={15} />
+                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Alex Morgan"
+                    autoComplete="name"
+                    required={mode === 'register'}
+                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                  />
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                 Work Email
@@ -139,7 +215,7 @@ export const LoginPage: React.FC = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@salesai.com"
+                  placeholder="name@company.com"
                   autoComplete="email"
                   required
                   className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
@@ -149,7 +225,7 @@ export const LoginPage: React.FC = () => {
 
             <div>
               <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                Password
+                {mode === 'register' ? 'Create Password' : 'Password'}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -160,19 +236,46 @@ export const LoginPage: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  autoComplete="current-password"
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                   required
                   className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
+              {mode === 'register' && (
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Must be at least 6 characters
+                </span>
+              )}
             </div>
+
+            {mode === 'register' && (
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock size={15} />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    autoComplete="new-password"
+                    required={mode === 'register'}
+                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                  />
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -182,25 +285,55 @@ export const LoginPage: React.FC = () => {
               {submitting ? (
                 <>
                   <Loader size={16} className="animate-spin text-white" />
-                  Authenticating...
+                  {mode === 'register' ? 'Creating Account...' : 'Authenticating...'}
                 </>
               ) : (
                 <>
-                  Sign In to Workspace <ArrowRight size={15} />
+                  {mode === 'register' ? 'Create Account & Sign In' : 'Sign In to Workspace'}
+                  <ArrowRight size={15} />
                 </>
               )}
             </button>
           </form>
 
+          {/* Mode Switch Footer */}
+          <div className="text-center pt-2">
+            {mode === 'login' ? (
+              <p className="text-xs text-slate-400">
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('register')}
+                  className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
+                >
+                  Create one here
+                </button>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch('login')}
+                  className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
+                >
+                  Sign in here
+                </button>
+              </p>
+            )}
+          </div>
+
           {/* Security Features Callout */}
           <div className="pt-4 border-t border-white/[0.06] flex items-center justify-center gap-4 text-[11px] text-slate-400">
             <span className="flex items-center gap-1">
-              <ShieldCheck size={13} className="text-emerald-400" /> JWT Encrypted
+              <ShieldCheck size={13} className="text-emerald-400" /> Bcrypt Hashed
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              <ShieldCheck size={13} className="text-indigo-400" /> JWT Encrypted
             </span>
             <span>•</span>
             <span>PostgreSQL CRM</span>
-            <span>•</span>
-            <span>Agentic Orchestration</span>
           </div>
         </div>
       </div>
@@ -209,3 +342,4 @@ export const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
+
