@@ -34,7 +34,13 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
+const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = rawApiUrl.endsWith('/api')
+  ? rawApiUrl
+  : (rawApiUrl.startsWith('http') ? `${rawApiUrl.replace(/\/$/, '')}/api` : rawApiUrl);
+
 // Radial SVG Gauge for Lead Qualification Score
+
 const ScoreDial: React.FC<{ score: number; status: string }> = ({ score, status }) => {
   const clamped = Math.min(100, Math.max(0, score || 0));
   const radius = 38;
@@ -1148,7 +1154,7 @@ const Dashboard: React.FC = () => {
                       <Mail size={14} /> Send to Client
                     </button>
                     <a
-                      href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                      href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
@@ -1341,7 +1347,7 @@ const Dashboard: React.FC = () => {
                       <Mail size={14} /> Send to Client
                     </button>
                     <a
-                      href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                      href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
@@ -1495,7 +1501,7 @@ const Dashboard: React.FC = () => {
                     Interactive Customer Portal
                   </span>
                   <a
-                    href={`http://localhost:8001/api/proposals/${leadId}/email-view`}
+                    href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"

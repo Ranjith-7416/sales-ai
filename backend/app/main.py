@@ -50,7 +50,9 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="Sales AI - Lead Qualification & Proposal Generation System",
     lifespan=lifespan,
+    redoc_js_url="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js",
 )
+
 
 # Add CORS middleware
 app.add_middleware(
@@ -89,6 +91,21 @@ async def configuration_status():
 @app.get("/")
 async def api_root(request: Request):
     """Return an interactive Developer Control Center when opened in browser, or JSON for API clients."""
+    # Dynamic frontend URL determination:
+    # If accessed from Render/production or any remote device, link directly to Vercel.
+    # When accessed from local laptop (localhost/127.0.0.1) in dev, keep localhost:3000.
+    host = request.headers.get("host", "").lower()
+    is_local_request = "localhost" in host or "127.0.0.1" in host
+    
+    if is_local_request and settings.ENVIRONMENT.lower() != "production":
+        frontend_url = "http://localhost:3000"
+        frontend_label = "localhost:3000"
+        button_label = "🚀 Launch Frontend Workspace"
+    else:
+        frontend_url = "https://sales-ai-ranjith-7416s-projects.vercel.app"
+        frontend_label = "https://sales-ai-ranjith-7416s-projects.vercel.app"
+        button_label = "🚀 Launch Frontend Workspace"
+
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         html = f"""<!DOCTYPE html>
@@ -167,7 +184,7 @@ async def api_root(request: Request):
       <div class="card">
         <div class="card-label">Frontend Web App</div>
         <div class="card-val" style="color: #34d399;">
-          <span>💻</span> React &bull; {settings.FRONTEND_URL.replace("https://", "").replace("http://", "")}
+          <span>💻</span> React &bull; {frontend_label}
         </div>
       </div>
     </div>
@@ -180,10 +197,11 @@ async def api_root(request: Request):
       <a href="/redoc" class="btn btn-secondary" target="_blank">
         📖 ReDoc API Spec (/redoc)
       </a>
-      <a href="{settings.FRONTEND_URL}" class="btn btn-success" target="_blank">
-        🚀 Launch Frontend Workspace
+      <a href="{frontend_url}" class="btn btn-success" target="_blank">
+        {button_label}
       </a>
     </div>
+
 
 
     <!-- Core API Endpoints -->
@@ -244,7 +262,7 @@ async def api_root(request: Request):
         "app": settings.APP_NAME,
         "status": "running",
         "version": settings.APP_VERSION,
-        "frontend": settings.FRONTEND_URL,
+        "frontend": frontend_url,
         "docs": "/docs",
         "redoc": "/redoc",
         "health": "/health",

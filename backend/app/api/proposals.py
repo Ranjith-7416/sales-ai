@@ -5,7 +5,9 @@ from app.database import get_db
 from app.models import Proposal, Lead
 from app.security import rate_limit, require_auth
 from app.services.email_service import dispatch_proposal_email, build_proposal_email_content
+from app.config import settings
 from datetime import datetime
+
 import uuid
 import logging
 from io import BytesIO
@@ -528,9 +530,10 @@ async def accept_proposal_page(lead_id: str, db: Session = Depends(get_db)):
         </div>
       </div>
 
-      <a href="http://localhost:3000/lead/{lead_id}" class="action-btn">
+      <a href="{settings.FRONTEND_URL}/lead/{lead_id}" class="action-btn">
         View Live Deal Room &amp; Pipeline Status &rarr;
       </a>
+
     </div>
   </div>
 
