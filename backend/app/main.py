@@ -34,12 +34,13 @@ async def lifespan(app: FastAPI):
     # Startup
     validate_production_settings()
     logger.info("Starting application...")
-    if settings.ENVIRONMENT.lower() != "production":
+    try:
         init_db()
-        logger.info("Development database initialized")
-    else:
-        logger.info("Production database migrations must be applied before startup")
+        logger.info("Database initialized successfully")
+    except Exception as exc:
+        logger.warning(f"Database initialization encountered an issue: {exc}")
     yield
+
     # Shutdown
     logger.info("Shutting down application...")
 
