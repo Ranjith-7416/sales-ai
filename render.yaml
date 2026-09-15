@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: sales-ai-backend
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sales-ai-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: sales-ai-redis
+          property: connectionString
+
+databases:
+  - name: sales-ai-postgres
+    plan: free
+    region: oregon
+    databaseName: salesai_db
+    user: salesai
