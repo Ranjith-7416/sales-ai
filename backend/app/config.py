@@ -99,10 +99,14 @@ class Settings(BaseSettings):
         '["http://localhost:3000", "http://localhost:5173"]',
     ))
 
-    # JWT
+    # JWT & Authentication
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@salesai.com")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "salesai123")
+    ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Sales AI Director")
+    ADMIN_ROLE: str = os.getenv("ADMIN_ROLE", "admin")
 
     # SMTP Email Delivery Configuration
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")

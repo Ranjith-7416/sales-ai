@@ -11,7 +11,7 @@ from datetime import datetime
 from app.config import settings, validate_production_settings
 from app.database import init_db, get_db
 from app.schemas import LeadInputSchema, LeadQualificationResult
-from app.api import leads, proposals, knowledge_base, config_api
+from app.api import leads, proposals, knowledge_base, config_api, auth
 from app.agents.orchestrator import get_orchestrator
 from app.models import Lead
 from app.models import Lead, LeadMemory
@@ -66,6 +66,7 @@ app.include_router(leads.router, prefix="/api/leads", tags=["Leads"])
 app.include_router(proposals.router, prefix="/api/proposals", tags=["Proposals"])
 app.include_router(knowledge_base.router, prefix="/api/knowledge-base", tags=["Knowledge Base"])
 app.include_router(config_api.router, prefix="/api/config", tags=["Configuration"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
 
 @app.get("/health")
