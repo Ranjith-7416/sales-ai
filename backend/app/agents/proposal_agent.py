@@ -134,42 +134,23 @@ Rules:
 - If a useful item is not supported, write [TO BE CONFIRMED] or omit it.
 - Return only the same proposal JSON structure, with no Markdown fences.
 """
-            repaired_response = await llm_service.invoke(repair_prompt)
             try:
+                repaired_response = await llm_service.invoke(repair_prompt)
                 repaired_result = parse_json_response(repaired_response)
                 repaired_validation = validate_proposal(
                     repaired_result,
                     requirements_result,
                     solution_matching_result,
                 )
-                if repaired_validation["approved"] and _is_usable_proposal(repaired_result):
+                if _is_usable_proposal(repaired_result):
                     result = repaired_result
                     grounding_validation = repaired_validation
-                elif repaired_validation["approved"]:
-                    logger.warning("Proposal grounding repair returned empty proposal content")
-            except json.JSONDecodeError:
-                logger.warning("Proposal grounding repair returned invalid JSON")
-
-        if not grounding_validation["approved"]:
-            logger.warning("Proposal blocked by grounding validation")
-            return {
-                "proposal_status": "blocked",
-                "executive_summary": "Proposal generation is blocked until unsupported claims are manually verified.",
-                "customer_requirements": requirements_result.get("functional_requirements", []) if requirements_result else [],
-                "proposed_solution": "Unavailable until grounding validation passes.",
-                "implementation_roadmap": [],
-                "total_implementation_timeline": "To be determined",
-                "pricing_proposal": {"status": "Blocked pending verification"},
-                "support_service_levels": {},
-                "success_metrics": [],
-                "next_steps": ["Review the unsupported claims listed by the grounding validator"],
-                "sections": [],
-                "grounding_validation": grounding_validation,
-            }
+            except Exception as e:
+                logger.warning(f"Proposal grounding repair failed ({e})")
 
         result["grounding_validation"] = grounding_validation
-        result["proposal_status"] = "approved"
-        logger.info("Proposal generation completed and passed grounding validation")
+        result["proposal_status"] = "approved" if grounding_validation.get("approved") else "draft"
+        logger.info(f"Proposal generation completed - Status: {result['proposal_status']}")
         return result
         
     except Exception as e:

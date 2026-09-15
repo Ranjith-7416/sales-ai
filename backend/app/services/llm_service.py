@@ -6,6 +6,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.callbacks import StreamingStdOutCallbackHandler
 from app.config import settings
 import logging
+import time
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,9 @@ def _is_quota_exhaustion(error: Exception) -> bool:
 
 def _is_transient_provider_error(error: Exception) -> bool:
     message = str(error).lower()
-    return any(marker in message for marker in ("503", "502", "504", "temporarily unavailable", "connection reset"))
+    return any(marker in message for marker in ("503", "502", "504", "temporarily unavailable", "connection reset")) or (
+        "429" in message and ("rate limit" in message or "try again in" in message or "tokens per minute" in message) and not _is_quota_exhaustion(error)
+    )
 
 
 class MockLLMProvider:
@@ -124,6 +128,24 @@ class LLMService:
         
         self.llm_main = self._initialize_main_llm()
         self.llm_reasoning = self._initialize_reasoning_llm()
+        self._groq_fallback_client = None
+
+    @property
+    def groq_fallback_llm(self):
+        if self.provider == "groq" and self.main_model != "openai/gpt-oss-20b":
+            if self._groq_fallback_client is None:
+                self._groq_fallback_client = ChatOpenAI(
+                    api_key=settings.GROQ_API_KEY,
+                    model_name="openai/gpt-oss-20b",
+                    temperature=self.temperature,
+                    max_tokens=2048,
+                    timeout=settings.LLM_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    base_url=GROQ_BASE_URL,
+                )
+            return self._groq_fallback_client
+        return None
+
 
     def _initialize_main_llm(self):
         """Initialize main LLM based on provider"""
@@ -148,7 +170,7 @@ class LLMService:
                 api_key=settings.OPENROUTER_API_KEY if self.provider == "openrouter" else settings.GROQ_API_KEY,
                 model_name=self.main_model,
                 temperature=self.temperature,
-                max_tokens=1024,
+                max_tokens=2048,
                 timeout=settings.LLM_TIMEOUT_SECONDS,
                 max_retries=0,
                 base_url=OPENROUTER_BASE_URL if self.provider == "openrouter" else GROQ_BASE_URL,
@@ -188,7 +210,7 @@ class LLMService:
                 api_key=settings.OPENROUTER_API_KEY if self.provider == "openrouter" else settings.GROQ_API_KEY,
                 model_name=self.reasoning_model,
                 temperature=0.5,
-                max_tokens=1024,
+                max_tokens=2048,
                 timeout=settings.LLM_TIMEOUT_SECONDS,
                 max_retries=0,
                 base_url=OPENROUTER_BASE_URL if self.provider == "openrouter" else GROQ_BASE_URL,
@@ -224,15 +246,27 @@ class LLMService:
             self.provider, self.main_model, self.reasoning_model = original_provider, original_main, original_reasoning
 
     def _invoke_with_protections(self, llm, prompt: str, provider: str, model: str) -> str:
-        for attempt in range(2):
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 response = llm.invoke(prompt)
                 return response.content
             except Exception as error:
                 if _is_quota_exhaustion(error):
                     raise ProviderQuotaError(f"{provider} provider quota exhausted for model {model}") from error
-                if attempt == 0 and _is_transient_provider_error(error):
-                    logger.warning("Transient LLM provider error; retrying once")
+                if attempt < max_attempts - 1 and _is_transient_provider_error(error):
+                    wait_seconds = 2.0 * (attempt + 1)
+                    match = re.search(r"try again in ([\d\.]+)s", str(error), re.IGNORECASE)
+                    if match:
+                        try:
+                            wait_seconds = float(match.group(1)) + 0.5
+                        except ValueError:
+                            pass
+                    logger.warning(
+                        "Transient LLM provider error / rate-limit; waiting %.1fs before retry (attempt %d/%d)",
+                        wait_seconds, attempt + 1, max_attempts
+                    )
+                    time.sleep(wait_seconds)
                     continue
                 logger.error("LLM invocation failed: %s", error)
                 raise
@@ -244,17 +278,26 @@ class LLMService:
         model = self.reasoning_model if use_reasoning else self.main_model
         try:
             return self._invoke_with_protections(llm, prompt, self.provider, model)
-        except ProviderQuotaError as primary_error:
-            for fallback_provider in self.fallback_providers:
-                fallback_llm, fallback_model = self._fallback_llm(fallback_provider, use_reasoning)
-                if not fallback_llm:
-                    continue
+        except Exception as primary_error:
+            # If Groq primary hits rate limit or quota, seamlessly try the lighter 20b model
+            if getattr(self, "groq_fallback_llm", None) is not None:
                 try:
-                    result = self._invoke_with_protections(fallback_llm, prompt, fallback_provider, fallback_model)
-                    logger.warning("Primary provider quota exhausted; completed request with configured fallback provider")
-                    return result
-                except ProviderQuotaError:
-                    continue
+                    logger.info("Attempting secondary Groq model (openai/gpt-oss-20b)...")
+                    return self._invoke_with_protections(self.groq_fallback_llm, prompt, "groq", "openai/gpt-oss-20b")
+                except Exception as secondary_error:
+                    logger.warning("Secondary Groq model call failed: %s", secondary_error)
+
+            if isinstance(primary_error, ProviderQuotaError):
+                for fallback_provider in self.fallback_providers:
+                    fallback_llm, fallback_model = self._fallback_llm(fallback_provider, use_reasoning)
+                    if not fallback_llm:
+                        continue
+                    try:
+                        result = self._invoke_with_protections(fallback_llm, prompt, fallback_provider, fallback_model)
+                        logger.warning("Primary provider quota exhausted; completed request with configured fallback provider")
+                        return result
+                    except ProviderQuotaError:
+                        continue
             raise primary_error
 
     async def batch_invoke(self, prompts: list) -> list:

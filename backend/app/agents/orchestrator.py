@@ -325,7 +325,7 @@ class SalesOrchestrator:
         if _has_provider_quota_error(state):
             return state
         proposal_result = state.get("proposal_result") or {}
-        if _has_missing_information(state) or not proposal_result or proposal_result.get("proposal_status") == "blocked":
+        if _has_missing_information(state) or not proposal_result:
             logger.info("Skipping final review until qualification and proposal generation are complete")
             return state
 
