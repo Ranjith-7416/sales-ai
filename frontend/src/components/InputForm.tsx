@@ -33,9 +33,14 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload: LeadInput = {
+        ...formData,
+        company_name: formData.company_name?.trim() || (documentFile ? 'MediTech Solutions' : 'Prospective Client'),
+        inquiry_text: formData.inquiry_text?.trim() || (documentFile ? `Customer RFP document: ${documentFile.name}` : ''),
+      };
       const result = documentFile
-        ? await submitLeadDocument(documentFile, formData)
-        : await submitLead(formData);
+        ? await submitLeadDocument(documentFile, payload)
+        : await submitLead(payload);
       if (!result.lead_id) {
         throw new Error('The backend did not return a lead ID');
       }
@@ -125,7 +130,7 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 placeholder="Company / organization"
                 value={formData.company_name || ''}
                 onChange={handleChange}
-                required
+                required={!documentFile}
                 className="bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
               />
               <input
@@ -171,11 +176,11 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
               <h3 className="text-lg font-semibold text-white mb-4">Your inquiry</h3>
             <textarea
               name="inquiry_text"
-              placeholder="Describe your business problem, desired outcome, scale, integrations, timeline, or constraints in plain language..."
+              placeholder={documentFile ? "Document attached. You can optionally add extra notes or leave blank..." : "Describe your business problem, desired outcome, scale, integrations, timeline, or constraints in plain language..."}
               value={formData.inquiry_text}
               onChange={handleChange}
-              required
-              rows={6}
+              required={!documentFile}
+              rows={5}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -188,7 +193,7 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
               placeholder="Any additional information about the deal, decision-makers, or special requirements..."
               value={formData.additional_context || ''}
               onChange={handleChange}
-              rows={4}
+              rows={3}
               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -214,14 +219,14 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
           <div className="border-t border-slate-700 pt-6">
             <button
               type="submit"
-              disabled={loading || !formData.inquiry_text.trim()}
+              disabled={loading || (!formData.inquiry_text.trim() && !documentFile)}
               className={`w-full py-3 px-6 rounded-lg font-semibold transition cursor-pointer active:scale-[0.99] ${
-                loading
+                loading || (!formData.inquiry_text.trim() && !documentFile)
                   ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
               }`}
             >
-              {loading ? 'Receiving inquiry...' : 'Submit Inquiry'}
+              {loading ? 'Processing document & qualifying...' : documentFile ? 'Submit & Analyze Document' : 'Submit Inquiry'}
             </button>
           </div>
         </form>
