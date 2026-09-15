@@ -132,26 +132,24 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
               <input
                 type="text"
                 name="company_name"
-                placeholder="e.g. MedCare Health Services, MediTech Solutions"
                 value={formData.company_name || ''}
                 onChange={handleChange}
                 required={!documentFile}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
               />
             </div>
 
             {/* The 6 Lead Context Blocks Grid matching user design */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {/* Block 1: Contact */}
-              <div className="bg-slate-750/90 bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
                 <label className="block text-xs text-slate-400 mb-1">Contact</label>
                 <input
                   type="text"
                   name="contact_name"
-                  placeholder="e.g. 7416503742 or Ranjith Kumar"
                   value={formData.contact_name || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
 
@@ -161,10 +159,9 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 <input
                   type="email"
                   name="email"
-                  placeholder="e.g. ranjithkumar3742@gmail.com"
                   value={formData.email || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
 
@@ -174,10 +171,9 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 <input
                   type="text"
                   name="industry"
-                  placeholder="e.g. Healthcare, Financial Services"
                   value={formData.industry || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
 
@@ -187,10 +183,9 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 <input
                   type="text"
                   name="company_size"
-                  placeholder="e.g. 250-500 employees"
                   value={formData.company_size || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
 
@@ -200,10 +195,9 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 <input
                   type="text"
                   name="budget"
-                  placeholder="e.g. $15,000 - $35,000/month"
                   value={formData.budget || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
 
@@ -213,10 +207,9 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 <input
                   type="text"
                   name="timeline"
-                  placeholder="e.g. 1-2 months, Q4 Rollout"
                   value={formData.timeline || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm placeholder-slate-500 focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
                 />
               </div>
             </div>
