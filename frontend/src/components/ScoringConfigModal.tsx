@@ -103,52 +103,55 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-700 mb-6">
+      <div className="glass-panel border border-white/[0.12] rounded-2xl max-w-lg w-full p-6 sm:p-7 shadow-2xl shadow-indigo-950/50 overflow-y-auto max-h-[90vh] relative">
+        {/* Glow ambient highlight */}
+        <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="flex items-center justify-between pb-4 border-b border-white/[0.08] mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-900/50 text-blue-400 rounded-lg">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-400 border border-indigo-500/30">
               <Sliders size={20} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Configurable Qualification Engine</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Qualification Engine Tuning</h2>
               <p className="text-xs text-slate-400">Customize criteria weights and status thresholds</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-md transition"
+            className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-white/[0.05] transition cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 bg-red-900/20 border border-red-700 rounded-lg p-3 text-red-200 text-sm flex items-center gap-2">
-            <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
+          <div className="mb-4 bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-rose-200 text-xs flex items-center gap-2">
+            <AlertTriangle size={15} className="text-rose-400 flex-shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {savedSuccess && (
-          <div className="mb-4 bg-green-900/20 border border-green-700 rounded-lg p-3 text-green-200 text-sm flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-green-400 flex-shrink-0" />
-            <span>Configuration saved successfully! Updating active pipeline criteria...</span>
+          <div className="mb-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-emerald-200 text-xs flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
+            <span>Configuration saved! Updating active pipeline criteria...</span>
           </div>
         )}
 
         <form onSubmit={handleSave} className="space-y-5">
           {/* Thresholds */}
-          <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600/50 space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">Lead Status Thresholds</h3>
+          <div className="glass-card p-4 rounded-xl border border-white/[0.06] space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Lead Status Thresholds</h3>
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Qualified Threshold:</span>
-                <span className="font-bold text-green-400">&gt;= {config.qualified_threshold} / 100</span>
+                <span className="font-bold text-emerald-400 font-mono">&ge; {config.qualified_threshold} / 100</span>
               </div>
               <input
                 type="range"
@@ -157,13 +160,13 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
                 step={1}
                 value={config.qualified_threshold}
                 onChange={(e) => setConfig({ ...config, qualified_threshold: Number(e.target.value) })}
-                className="w-full accent-green-500 cursor-pointer"
+                className="w-full accent-emerald-500 cursor-pointer"
               />
             </div>
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Needs More Information Threshold:</span>
-                <span className="font-bold text-yellow-400">&gt;= {config.needs_info_threshold} / 100</span>
+                <span className="font-bold text-amber-400 font-mono">&ge; {config.needs_info_threshold} / 100</span>
               </div>
               <input
                 type="range"
@@ -172,25 +175,25 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
                 step={1}
                 value={config.needs_info_threshold}
                 onChange={(e) => setConfig({ ...config, needs_info_threshold: Number(e.target.value) })}
-                className="w-full accent-yellow-500 cursor-pointer"
+                className="w-full accent-amber-500 cursor-pointer"
               />
-              <p className="text-xs text-slate-400 mt-1">Scores below {config.needs_info_threshold} are marked as Low Priority.</p>
+              <p className="text-[11px] text-slate-400 mt-1">Scores below {config.needs_info_threshold} are marked as Low Priority.</p>
             </div>
           </div>
 
           {/* Criteria Weights */}
-          <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600/50 space-y-4">
+          <div className="glass-card p-4 rounded-xl border border-white/[0.06] space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">Criteria Weights</h3>
-              <span className={`text-xs px-2 py-0.5 rounded font-mono font-bold ${isWeightValid ? 'bg-green-900/50 text-green-300 border border-green-700' : 'bg-red-900/50 text-red-300 border border-red-700'}`}>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">Criteria Weights</h3>
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-mono font-bold border ${isWeightValid ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/10 text-rose-300 border-rose-500/30'}`}>
                 Sum: {totalWeight.toFixed(2)} / 1.00
               </span>
             </div>
 
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Product/Technical Fit:</span>
-                <span className="font-mono text-blue-400 font-semibold">{Math.round(config.fit_weight * 100)}%</span>
+                <span className="font-mono text-cyan-400 font-bold">{Math.round(config.fit_weight * 100)}%</span>
               </div>
               <input
                 type="range"
@@ -199,14 +202,14 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
                 step={0.05}
                 value={config.fit_weight}
                 onChange={(e) => handleWeightChange('fit_weight', Number(e.target.value))}
-                className="w-full accent-blue-500 cursor-pointer"
+                className="w-full accent-cyan-500 cursor-pointer"
               />
             </div>
 
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Readiness (Timeline & Budget):</span>
-                <span className="font-mono text-blue-400 font-semibold">{Math.round(config.readiness_weight * 100)}%</span>
+                <span className="font-mono text-blue-400 font-bold">{Math.round(config.readiness_weight * 100)}%</span>
               </div>
               <input
                 type="range"
@@ -220,9 +223,9 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
             </div>
 
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Opportunity Scale:</span>
-                <span className="font-mono text-purple-400 font-semibold">{Math.round(config.opportunity_weight * 100)}%</span>
+                <span className="font-mono text-purple-400 font-bold">{Math.round(config.opportunity_weight * 100)}%</span>
               </div>
               <input
                 type="range"
@@ -236,9 +239,9 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
             </div>
 
             <div>
-              <div className="flex justify-between text-sm mb-1">
+              <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-300">Risk Mitigation Weight:</span>
-                <span className="font-mono text-red-400 font-semibold">{Math.round(config.risk_weight * 100)}%</span>
+                <span className="font-mono text-rose-400 font-bold">{Math.round(config.risk_weight * 100)}%</span>
               </div>
               <input
                 type="range"
@@ -247,45 +250,45 @@ const ScoringConfigModal: React.FC<ScoringConfigModalProps> = ({ isOpen, onClose
                 step={0.05}
                 value={config.risk_weight}
                 onChange={(e) => handleWeightChange('risk_weight', Number(e.target.value))}
-                className="w-full accent-red-500 cursor-pointer"
+                className="w-full accent-rose-500 cursor-pointer"
               />
             </div>
           </div>
 
-          <div className="p-3 bg-slate-900/60 rounded-lg text-xs text-slate-400 font-mono border border-slate-700/60">
-            <strong>Formula:</strong> Score = (Fit × {config.fit_weight.toFixed(2)}) + (Readiness × {config.readiness_weight.toFixed(2)}) + (Opp × {config.opportunity_weight.toFixed(2)}) + ((100 − Risk) × {config.risk_weight.toFixed(2)})
+          <div className="p-3 bg-slate-900/80 rounded-xl text-[11px] text-slate-400 font-mono border border-white/[0.06] leading-relaxed">
+            <strong className="text-indigo-300">Formula:</strong> Score = (Fit × {config.fit_weight.toFixed(2)}) + (Readiness × {config.readiness_weight.toFixed(2)}) + (Opp × {config.opportunity_weight.toFixed(2)}) + ((100 − Risk) × {config.risk_weight.toFixed(2)})
           </div>
 
           <div className="flex gap-3 justify-end pt-2">
             <button
               type="button"
               onClick={handleResetDefaults}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+              className="px-4 py-2 text-xs text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-white/[0.08] rounded-xl flex items-center gap-1.5 transition cursor-pointer active:scale-95"
             >
-              <RefreshCw size={14} /> Reset Defaults
+              <RefreshCw size={13} /> Reset Defaults
             </button>
             <button
               type="button"
               onClick={handleSave}
               disabled={saving || !isWeightValid}
-              className={`px-5 py-2 text-sm font-semibold rounded-lg text-white transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${
+              className={`px-5 py-2 text-xs font-semibold rounded-xl text-white transition cursor-pointer active:scale-95 flex items-center gap-1.5 shadow-lg ${
                 saving
                   ? 'bg-blue-600/70 text-blue-100 cursor-wait'
                   : savedSuccess
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                   : !isWeightValid
-                  ? 'bg-blue-600/50 text-slate-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20'
+                  ? 'bg-blue-600/40 text-slate-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-indigo-500/25'
               }`}
             >
               {saving ? (
                 <>
-                  <RefreshCw size={14} className="animate-spin" />
+                  <RefreshCw size={13} className="animate-spin" />
                   <span>Applying...</span>
                 </>
               ) : savedSuccess ? (
                 <>
-                  <CheckCircle2 size={15} className="text-white" />
+                  <CheckCircle2 size={14} className="text-white" />
                   <span>Applied!</span>
                 </>
               ) : (

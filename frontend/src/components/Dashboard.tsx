@@ -22,7 +22,68 @@ import {
   Sparkles,
   FileText,
   Database,
+  User,
+  Mail,
+  Briefcase,
+  Users,
+  DollarSign,
+  Calendar,
+  Activity,
+  Layers,
+  FileDown,
 } from 'lucide-react';
+
+// Radial SVG Gauge for Lead Qualification Score
+const ScoreDial: React.FC<{ score: number; status: string }> = ({ score, status }) => {
+  const clamped = Math.min(100, Math.max(0, score || 0));
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (clamped / 100) * circumference;
+
+  const color =
+    status === LeadStatus.Qualified || clamped >= 75
+      ? '#10b981' // emerald
+      : status === LeadStatus.NeedsInfo || clamped >= 50
+      ? '#f59e0b' // amber
+      : '#f43f5e'; // rose
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 96 96">
+        {/* Background track */}
+        <circle
+          cx="48"
+          cy="48"
+          r={radius}
+          stroke="rgba(255, 255, 255, 0.08)"
+          strokeWidth="7"
+          fill="transparent"
+        />
+        {/* Dynamic progress ring */}
+        <circle
+          cx="48"
+          cy="48"
+          r={radius}
+          stroke={color}
+          strokeWidth="7"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          fill="transparent"
+          style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center justify-center text-center">
+        <span className="text-xl font-black text-white tracking-tight" style={{ color }}>
+          {status === LeadStatus.NeedsInfo && clamped === 0 ? '—' : clamped}
+        </span>
+        <span className="text-[9px] uppercase tracking-wider text-slate-400 font-medium">
+          Fit Score
+        </span>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const { leadId } = useParams<{ leadId: string }>();
@@ -82,11 +143,14 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <Loader className="animate-spin mx-auto mb-4 text-blue-500" size={40} />
-          <p className="text-white text-lg font-medium">Analyzing sales lead through AI pipeline...</p>
-          <p className="text-slate-400 text-sm mt-1">Extracting requirements, searching knowledge base, qualifying...</p>
+      <div className="flex items-center justify-center min-h-[420px]">
+        <div className="text-center space-y-4">
+          <div className="relative inline-flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin" />
+            <Sparkles className="absolute text-cyan-400 animate-pulse" size={24} />
+          </div>
+          <p className="text-white text-lg font-medium tracking-wide">Analyzing sales lead through AI pipeline...</p>
+          <p className="text-slate-400 text-xs font-mono">Extracting requirements • Searching product KB • Synthesizing proposal</p>
         </div>
       </div>
     );
@@ -94,15 +158,15 @@ const Dashboard: React.FC = () => {
 
   if (error || !lead) {
     return (
-      <div className="bg-red-900/20 border border-red-700 rounded-xl p-8 flex gap-4">
-        <AlertCircle className="text-red-500 flex-shrink-0" size={28} />
+      <div className="glass-panel border border-red-500/30 rounded-2xl p-8 flex gap-4 text-red-200">
+        <AlertCircle className="text-red-400 flex-shrink-0" size={28} />
         <div>
-          <h3 className="text-red-100 font-bold text-lg">Error Loading Lead</h3>
-          <p className="text-red-200 mt-1">{error || 'Lead record not found in system.'}</p>
+          <h3 className="text-red-100 font-bold text-lg">Error Loading Lead Record</h3>
+          <p className="text-red-300/80 text-sm mt-1">{error || 'Lead record not found in PostgreSQL database.'}</p>
           <button
             type="button"
             onClick={() => navigate('/leads')}
-            className="mt-4 px-4 py-2 bg-red-800/60 hover:bg-red-700 text-white rounded-lg text-sm transition cursor-pointer active:scale-95"
+            className="mt-4 px-4 py-2 bg-red-900/40 hover:bg-red-800/60 border border-red-700/60 text-white rounded-xl text-xs font-semibold transition cursor-pointer active:scale-95"
           >
             Return to All Leads
           </button>
@@ -123,29 +187,33 @@ const Dashboard: React.FC = () => {
       case 'Qualified':
       case LeadStatus.Qualified:
         return {
-          color: 'bg-emerald-900/40 border-emerald-500/60 text-emerald-300',
-          icon: <CheckCircle2 size={18} className="text-emerald-400" />,
-          label: 'Qualified',
+          pill: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
+          dot: 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]',
+          icon: <CheckCircle2 size={16} className="text-emerald-400" />,
+          label: 'Qualified Lead',
         };
       case 'Needs More Information':
       case LeadStatus.NeedsInfo:
         return {
-          color: 'bg-amber-900/40 border-amber-500/60 text-amber-300',
-          icon: <HelpCircle size={18} className="text-amber-400" />,
+          pill: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+          dot: 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]',
+          icon: <HelpCircle size={16} className="text-amber-400" />,
           label: 'Needs More Information',
         };
       case 'Low Priority':
       case LeadStatus.LowPriority:
         return {
-          color: 'bg-rose-900/40 border-rose-500/60 text-rose-300',
-          icon: <AlertTriangle size={18} className="text-rose-400" />,
+          pill: 'bg-rose-500/10 border-rose-500/30 text-rose-300',
+          dot: 'bg-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.8)]',
+          icon: <AlertTriangle size={16} className="text-rose-400" />,
           label: 'Low Priority',
         };
       default:
         return {
-          color: 'bg-blue-900/40 border-blue-500/60 text-blue-300',
-          icon: <Loader size={18} className="animate-spin text-blue-400" />,
-          label: status || 'Processing',
+          pill: 'bg-blue-500/10 border-blue-500/30 text-blue-300',
+          dot: 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]',
+          icon: <Loader size={16} className="animate-spin text-blue-400" />,
+          label: status || 'Processing Pipeline',
         };
     }
   };
@@ -169,14 +237,18 @@ const Dashboard: React.FC = () => {
     return 'Grounded catalog pricing';
   };
 
-  const stageLabels: Record<string, string> = {
-    research: 'Researching company public context',
-    requirements: 'Extracting functional & non-functional requirements',
-    qualification: 'Computing explainable opportunity score',
-    solution_matching: 'Matching product catalog with RAG',
-    proposal: 'Drafting strictly grounded proposal',
-    reviewer: 'Validating coverage & verifying claims against KB',
-  };
+  // 6 Pipeline Stages definition
+  const pipelineStages = [
+    { key: 'research', label: '1. Research' },
+    { key: 'requirements', label: '2. Requirements' },
+    { key: 'qualification', label: '3. Qualification' },
+    { key: 'solution_matching', label: '4. Solutions' },
+    { key: 'proposal', label: '5. Proposal' },
+    { key: 'reviewer', label: '6. QA Review' },
+  ];
+
+  const isCompleted = lead.status === 'completed';
+  const completedStages = new Set(lead.stages_completed || (isCompleted ? pipelineStages.map(s => s.key) : []));
 
   const startEditing = () => {
     setEditForm({
@@ -236,150 +308,196 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const numericScore = qualification?.composite_score ?? 0;
+
   return (
     <div className="space-y-6">
-      {/* Top Banner & Customer Information */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-700">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-white tracking-tight">
-                {lead.company_name || 'Customer Opportunity'}
-              </h1>
-              <div className={`inline-flex items-center gap-2 border rounded-full px-3.5 py-1 text-sm font-semibold shadow-sm ${statusBadge.color}`}>
-                {statusBadge.icon}
-                <span>{statusBadge.label}</span>
+      {/* Top Banner & Opportunity Hero Card */}
+      <div className="glass-panel border border-white/[0.08] rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+        {/* Glow ambient highlight */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-white/[0.08]">
+          {/* Company Title & ID */}
+          <div className="flex items-start sm:items-center gap-5">
+            {/* Score Dial */}
+            <ScoreDial score={numericScore} status={lead.lead_status} />
+
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  {lead.company_name || 'Customer Opportunity'}
+                </h1>
+                <div className={`inline-flex items-center gap-2 border rounded-full px-3.5 py-1 text-xs font-semibold backdrop-blur-md ${statusBadge.pill}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dot}`} />
+                  {statusBadge.icon}
+                  <span>{statusBadge.label}</span>
+                </div>
               </div>
+
+              <p className="text-slate-400 text-xs mt-1.5 flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-slate-300">ID: {lead.id.slice(0, 8)}...</span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Calendar size={12} className="text-slate-400" />
+                  Received {new Date(lead.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+                <span>•</span>
+                <span className="text-emerald-400 font-medium">PostgreSQL Sync: Live</span>
+              </p>
             </div>
-            <p className="text-slate-400 text-sm mt-1">
-              Lead ID: <span className="font-mono text-slate-300">{lead.id}</span> • Received {new Date(lead.created_at).toLocaleDateString()}
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={startEditing}
-              className="inline-flex items-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-3.5 py-2 text-sm font-medium text-white transition border border-slate-600 cursor-pointer active:scale-95"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 px-4 py-2 text-xs font-semibold text-white transition border border-white/[0.08] cursor-pointer active:scale-95"
             >
-              <Edit3 size={15} /> Edit Lead Context
+              <Edit3 size={14} className="text-indigo-400" /> Edit Lead Context
             </button>
             {proposal && (
               <button
                 type="button"
                 onClick={handleExportProposal}
                 disabled={exporting}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-sm font-medium text-white transition shadow-sm cursor-pointer active:scale-95"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-4 py-2 text-xs font-semibold text-white transition shadow-lg shadow-indigo-500/20 cursor-pointer active:scale-95"
               >
-                <Download size={15} /> {exporting ? 'Exporting...' : 'Export Proposal (.md)'}
+                <Download size={14} /> {exporting ? 'Exporting...' : 'Export Proposal (.md)'}
               </button>
             )}
           </div>
         </div>
 
-        {/* Customer Info Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-4 text-xs">
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Contact</span>
-            <span className="text-white font-medium truncate block">{lead.contact_name || 'Not provided'}</span>
+        {/* 6 Context Blocks Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <User size={12} className="text-cyan-400" /> Contact
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.contact_name || 'Not provided'}</span>
           </div>
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Email</span>
-            <span className="text-white font-medium truncate block">{lead.email || 'Not provided'}</span>
+
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <Mail size={12} className="text-blue-400" /> Email
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.email || 'Not provided'}</span>
           </div>
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Industry</span>
-            <span className="text-white font-medium truncate block">{lead.industry || 'General'}</span>
+
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <Briefcase size={12} className="text-indigo-400" /> Industry
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.industry || 'General'}</span>
           </div>
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Company Size</span>
-            <span className="text-white font-medium truncate block">{lead.company_size || 'To be confirmed'}</span>
+
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <Users size={12} className="text-purple-400" /> Company Size
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.company_size || 'To be confirmed'}</span>
           </div>
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Budget</span>
-            <span className="text-white font-medium truncate block">{lead.budget || 'To be confirmed'}</span>
+
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <DollarSign size={12} className="text-emerald-400" /> Budget
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.budget || 'To be confirmed'}</span>
           </div>
-          <div className="bg-slate-700/40 p-2.5 rounded-lg border border-slate-600/30">
-            <span className="text-slate-400 block mb-0.5">Timeline</span>
-            <span className="text-white font-medium truncate block">{lead.timeline || 'To be confirmed'}</span>
+
+          <div className="glass-card p-3 rounded-xl border border-white/[0.06]">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 mb-1">
+              <Clock size={12} className="text-amber-400" /> Timeline
+            </span>
+            <span className="text-white text-xs font-semibold truncate block">{lead.timeline || 'To be confirmed'}</span>
           </div>
         </div>
 
-        {/* Lead Score Cards */}
+        {/* Lead Score Breakdown Cards */}
         {qualification && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
-            <div className="bg-gradient-to-br from-blue-950/60 to-slate-900 border border-blue-800/80 rounded-xl p-4 flex flex-col justify-between">
-              <div>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Composite Score</span>
-                <div className="text-3xl font-black text-blue-400 mt-1">
-                  {formatScore(qualification.composite_score)}
-                  <span className="text-xs font-normal text-slate-500"> / 100</span>
-                </div>
+            {/* Composite Score */}
+            <div className="glass-card p-3.5 rounded-xl border border-indigo-500/30 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-indigo-300 uppercase tracking-wider font-semibold">Composite</span>
+                <span className="text-[10px] text-slate-400 font-mono">100%</span>
               </div>
-              <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="text-2xl font-black text-indigo-400 mt-1">
+                {formatScore(qualification.composite_score)}
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-700"
                   style={{ width: `${Math.min(100, Math.max(0, qualification.composite_score || 0))}%` }}
                 />
               </div>
             </div>
 
-            <div className="bg-slate-750/70 bg-slate-800/90 border border-slate-700 rounded-xl p-4 flex flex-col justify-between">
-              <div>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Product Fit (25%)</span>
-                <div className="text-2xl font-bold text-emerald-400 mt-1">
-                  {formatScore(qualification.fit_score)}
-                </div>
+            {/* Product Fit */}
+            <div className="glass-card p-3.5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-emerald-300 uppercase tracking-wider font-semibold">Fit (25%)</span>
+                <span className="text-[10px] text-emerald-500 font-mono">RAG Match</span>
               </div>
-              <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="text-2xl font-bold text-emerald-400 mt-1">
+                {formatScore(qualification.fit_score)}
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-full rounded-full"
+                  className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full"
                   style={{ width: `${Math.min(100, Math.max(0, qualification.fit_score || 0))}%` }}
                 />
               </div>
             </div>
 
-            <div className="bg-slate-750/70 bg-slate-800/90 border border-slate-700 rounded-xl p-4 flex flex-col justify-between">
-              <div>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Readiness (25%)</span>
-                <div className="text-2xl font-bold text-yellow-400 mt-1">
-                  {formatScore(qualification.readiness_score)}
-                </div>
+            {/* Readiness */}
+            <div className="glass-card p-3.5 rounded-xl border border-amber-500/20 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-amber-300 uppercase tracking-wider font-semibold">Readiness (25%)</span>
+                <span className="text-[10px] text-amber-500 font-mono">Intent</span>
               </div>
-              <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="text-2xl font-bold text-amber-400 mt-1">
+                {formatScore(qualification.readiness_score)}
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
                 <div
-                  className="bg-yellow-500 h-full rounded-full"
+                  className="bg-gradient-to-r from-amber-500 to-yellow-400 h-full rounded-full"
                   style={{ width: `${Math.min(100, Math.max(0, qualification.readiness_score || 0))}%` }}
                 />
               </div>
             </div>
 
-            <div className="bg-slate-750/70 bg-slate-800/90 border border-slate-700 rounded-xl p-4 flex flex-col justify-between">
-              <div>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Opportunity (30%)</span>
-                <div className="text-2xl font-bold text-purple-400 mt-1">
-                  {formatScore(qualification.opportunity_score)}
-                </div>
+            {/* Opportunity */}
+            <div className="glass-card p-3.5 rounded-xl border border-purple-500/20 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-purple-300 uppercase tracking-wider font-semibold">Opportunity (30%)</span>
+                <span className="text-[10px] text-purple-500 font-mono">Scale</span>
               </div>
-              <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="text-2xl font-bold text-purple-400 mt-1">
+                {formatScore(qualification.opportunity_score)}
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
                 <div
-                  className="bg-purple-500 h-full rounded-full"
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 h-full rounded-full"
                   style={{ width: `${Math.min(100, Math.max(0, qualification.opportunity_score || 0))}%` }}
                 />
               </div>
             </div>
 
-            <div className="bg-slate-750/70 bg-slate-800/90 border border-slate-700 rounded-xl p-4 flex flex-col justify-between">
-              <div>
-                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Risk Level (20%)</span>
-                <div className="text-2xl font-bold text-rose-400 mt-1">
-                  {Math.round(qualification.risk_score || 0)}
-                  <span className="text-xs text-slate-400 font-normal"> (low is good)</span>
-                </div>
+            {/* Risk Level */}
+            <div className="glass-card p-3.5 rounded-xl border border-rose-500/20 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-rose-300 uppercase tracking-wider font-semibold">Risk (20%)</span>
+                <span className="text-[10px] text-rose-500 font-mono">Low is good</span>
               </div>
-              <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="text-2xl font-bold text-rose-400 mt-1">
+                {Math.round(qualification.risk_score || 0)}
+              </div>
+              <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
                 <div
-                  className="bg-rose-500 h-full rounded-full"
+                  className="bg-gradient-to-r from-rose-500 to-red-400 h-full rounded-full"
                   style={{ width: `${Math.min(100, Math.max(0, qualification.risk_score || 0))}%` }}
                 />
               </div>
@@ -387,30 +505,57 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Processing status banner */}
-        {lead.status !== 'completed' && (
-          <div className="mt-5 rounded-lg border border-blue-700 bg-blue-950/40 p-4 text-blue-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Loader className="animate-spin text-blue-400" size={18} />
-              <span className="font-medium">
-                {stageLabels[lead.current_stage || ''] || 'Processing sequential multi-agent pipeline...'}
-              </span>
-            </div>
-            {lead.stages_completed && lead.stages_completed.length > 0 && (
-              <span className="text-xs text-blue-300 font-mono">
-                Completed: {lead.stages_completed.filter(s => s !== 'complete').join(' → ')}
-              </span>
-            )}
+        {/* Futuristic 6-Stage Pipeline Stepper */}
+        <div className="mt-6 pt-5 border-t border-white/[0.08]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+              <Activity size={13} className="text-indigo-400" />
+              Autonomous Agent Pipeline Stages
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono">
+              {isCompleted ? 'Pipeline Complete (6/6)' : `Current: ${lead.current_stage || 'Processing'}`}
+            </span>
           </div>
-        )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+            {pipelineStages.map((stage, idx) => {
+              const done = isCompleted || completedStages.has(stage.key);
+              const current = !isCompleted && lead.current_stage === stage.key;
+
+              return (
+                <div
+                  key={stage.key}
+                  className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 transition ${
+                    done
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : current
+                      ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300 animate-pulse'
+                      : 'bg-slate-900/40 border-white/[0.05] text-slate-500'
+                  }`}
+                >
+                  {done ? (
+                    <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                  ) : current ? (
+                    <Loader size={14} className="animate-spin text-indigo-400 flex-shrink-0" />
+                  ) : (
+                    <span className="w-3.5 h-3.5 rounded-full border border-slate-600 text-[10px] flex items-center justify-center text-slate-400">
+                      {idx + 1}
+                    </span>
+                  )}
+                  <span className="truncate font-medium">{stage.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Inline Edit Form Modal / Accordion */}
+      {/* Inline Edit Form Modal */}
       {editing && (
-        <form onSubmit={handleUpdate} className="bg-slate-800 border border-blue-600 rounded-xl p-6 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-700">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Edit3 size={18} className="text-blue-400" /> Update Lead Context & Re-evaluate
+        <form onSubmit={handleUpdate} className="glass-panel border border-indigo-500/40 rounded-2xl p-6 space-y-4 shadow-2xl">
+          <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Edit3 size={18} className="text-indigo-400" /> Update Opportunity Context & Re-evaluate
             </h2>
             <button type="button" onClick={() => setEditing(false)} className="text-slate-400 hover:text-white" aria-label="Cancel update">
               <X size={20} />
@@ -422,42 +567,42 @@ const Dashboard: React.FC = () => {
               value={editForm.company_name || ''}
               onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
               placeholder="Company Name"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
             <input
               name="contact_name"
               value={editForm.contact_name || ''}
               onChange={(e) => setEditForm({ ...editForm, contact_name: e.target.value })}
               placeholder="Contact Person"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
             <input
               name="email"
               value={editForm.email || ''}
               onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               placeholder="Email"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
             <input
               name="industry"
               value={editForm.industry || ''}
               onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })}
               placeholder="Industry"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
             <input
               name="company_size"
               value={editForm.company_size || ''}
               onChange={(e) => setEditForm({ ...editForm, company_size: e.target.value })}
-              placeholder="Company Size (e.g. 500-1000)"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              placeholder="Company Size"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
             <input
               name="budget"
               value={editForm.budget || ''}
               onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })}
               placeholder="Budget Range"
-              className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
           </div>
           <div>
@@ -469,7 +614,7 @@ const Dashboard: React.FC = () => {
               required
               rows={3}
               placeholder="Inquiry text..."
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
           </div>
           <div>
@@ -480,66 +625,75 @@ const Dashboard: React.FC = () => {
               onChange={(e) => setEditForm({ ...editForm, additional_context: e.target.value })}
               rows={2}
               placeholder="Approvals, existing stack, integrations..."
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-400"
+              className="w-full bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
           </div>
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white bg-slate-700 rounded-lg transition cursor-pointer active:scale-95"
+              className="px-4 py-2 text-xs text-slate-300 hover:text-white bg-slate-800 rounded-xl transition cursor-pointer active:scale-95"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition cursor-pointer active:scale-95"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-4 py-2 text-xs font-semibold text-white transition cursor-pointer active:scale-95 shadow-lg shadow-emerald-500/20"
             >
-              <Save size={15} /> Save and Re-run Pipeline
+              <Save size={14} /> Save and Re-run Pipeline
             </button>
           </div>
         </form>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="border-b border-slate-700">
-        <div className="flex gap-1 overflow-x-auto pb-0.5">
+      {/* Cyber Glass Navigation Tabs */}
+      <div className="border-b border-white/[0.08]">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           {[
-            { id: 'overview', label: 'Overview & Qualification' },
-            { id: 'research', label: 'Company Research' },
-            { id: 'requirements', label: 'Extracted Requirements' },
-            { id: 'solution', label: 'Solution' },
-            { id: 'proposal', label: 'Proposal' },
-            { id: 'review', label: 'Review' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-3 font-semibold text-sm border-b-2 transition whitespace-nowrap cursor-pointer active:scale-[0.98] ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-400 bg-slate-800/40'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 'overview', label: 'Overview & Score', icon: <Sparkles size={14} /> },
+            { id: 'research', label: 'Web Research', icon: <Building2 size={14} /> },
+            { id: 'requirements', label: 'Requirements', icon: <FileText size={14} /> },
+            { id: 'solution', label: 'Solutions', icon: <Database size={14} /> },
+            { id: 'proposal', label: 'Executive Proposal', icon: <FileDown size={14} /> },
+            { id: 'review', label: 'QA & Review', icon: <ShieldCheck size={14} /> },
+          ].map(tab => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-2.5 rounded-xl font-semibold text-xs transition flex items-center gap-2 whitespace-nowrap cursor-pointer active:scale-95 border ${
+                  isActive
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-400/40 shadow-lg shadow-indigo-500/25'
+                    : 'bg-slate-900/50 text-slate-400 border-white/[0.06] hover:bg-slate-800/80 hover:text-white'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Tab Panels */}
-      <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 min-h-[450px]">
+      {/* Tab Panels with Glass Container */}
+      <div className="glass-panel border border-white/[0.08] rounded-2xl p-6 sm:p-8 min-h-[450px]">
+
         {/* 1. OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Qualification Narrative */}
             {qualification && (
-              <div className="bg-slate-750/50 bg-slate-900/40 p-5 rounded-xl border border-slate-700">
-                <h2 className="text-base font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Sparkles size={18} className="text-blue-400" /> Qualification Reasoning & Narrative
+              <div className="glass-card p-6 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Sparkles size={18} className="text-cyan-400" />
+                  <span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
+                    AI Qualification Reasoning & Strategy
+                  </span>
                 </h2>
-                <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-line">
+                <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-line font-normal">
                   {qualification.qualification_reasoning}
                 </p>
               </div>
@@ -547,18 +701,21 @@ const Dashboard: React.FC = () => {
 
             {/* Missing Information Callout */}
             {requirements?.missing_information && requirements.missing_information.length > 0 && (
-              <div className="bg-amber-950/30 border border-amber-600/50 rounded-xl p-5">
-                <h3 className="text-base font-bold text-amber-300 mb-2 flex items-center gap-2">
-                  <HelpCircle size={18} className="text-amber-400" /> Information Needed to Accelerate Deal
-                </h3>
-                <p className="text-xs text-amber-200/80 mb-3">
-                  The following requirements were not fully specified in the customer inquiry. Click "Edit Lead Context" to fill them in:
+              <div className="glass-card bg-amber-500/[0.04] border border-amber-500/30 rounded-2xl p-6 relative overflow-hidden">
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <HelpCircle size={16} />
+                  </div>
+                  <h3 className="text-sm font-bold text-amber-300">Information Needed to Accelerate Deal</h3>
+                </div>
+                <p className="text-xs text-amber-200/80 mb-4">
+                  The following requirements were not fully specified in the customer inquiry. Click "Edit Lead Context" above to fill them in:
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {requirements.missing_information.map((item, idx) => (
-                    <div key={idx} className="bg-amber-900/20 border border-amber-800/50 rounded-lg p-2.5 text-xs text-amber-100 flex items-start gap-2">
-                      <span className="text-amber-400 font-bold">•</span>
-                      <span>{item}</span>
+                    <div key={idx} className="bg-slate-900/60 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-100 flex items-start gap-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0 shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
+                      <span className="leading-relaxed">{item}</span>
                     </div>
                   ))}
                 </div>
@@ -568,19 +725,22 @@ const Dashboard: React.FC = () => {
             {/* Key Score Drivers */}
             {qualification?.score_drivers && qualification.score_drivers.length > 0 && (
               <div>
-                <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
-                  <TrendingUp size={18} className="text-emerald-400" /> Key Score Drivers & Evidence
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-emerald-400" />
+                  <span>Key Score Drivers & Evidence</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {qualification.score_drivers.map((driver, idx) => {
                     const factor = Array.isArray(driver) ? driver[0] : (driver as any)?.factor || 'Driver';
                     const impact = Array.isArray(driver) ? driver[1] : (driver as any)?.impact || 'Positive';
                     return (
-                      <div key={idx} className="bg-slate-700/50 border border-slate-600/60 rounded-lg p-3.5 flex items-start gap-3">
-                        <CheckCircle2 size={16} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                      <div key={idx} className="glass-card p-4 rounded-xl border border-white/[0.08] hover:border-emerald-500/40 transition flex items-start gap-3">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5">
+                          <CheckCircle2 size={14} />
+                        </div>
                         <div>
-                          <p className="text-white font-semibold text-sm">{factor}</p>
-                          <p className="text-slate-300 text-xs mt-0.5">{impact}</p>
+                          <p className="text-white font-semibold text-xs">{factor}</p>
+                          <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">{impact}</p>
                         </div>
                       </div>
                     );
@@ -590,9 +750,11 @@ const Dashboard: React.FC = () => {
             )}
 
             {/* Original Customer Inquiry Preview */}
-            <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-700/60">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Customer Inquiry Text</h3>
-              <p className="text-slate-300 text-sm italic">"{lead.inquiry_text}"</p>
+            <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Original Customer Inquiry</h3>
+              <blockquote className="text-slate-300 text-xs italic border-l-2 border-indigo-500/50 pl-3 leading-relaxed">
+                "{lead.inquiry_text}"
+              </blockquote>
             </div>
           </div>
         )}
@@ -603,27 +765,38 @@ const Dashboard: React.FC = () => {
             {research ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600/50">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider block">Company & Industry</span>
-                    <h3 className="text-lg font-bold text-white mt-1">{research.company_name}</h3>
-                    <p className="text-sm text-blue-400 mt-0.5">{research.industry_vertical} • {research.company_size}</p>
-                    <p className="text-xs text-slate-400 mt-2"><strong>Location:</strong> {research.location}</p>
+                  <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+                    <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold block">Company & Industry</span>
+                    <h3 className="text-lg font-bold text-white mt-1.5 flex items-center gap-2">
+                      <Building2 size={18} className="text-cyan-400" />
+                      {research.company_name}
+                    </h3>
+                    <p className="text-xs text-indigo-400 mt-1">{research.industry_vertical} • {research.company_size}</p>
+                    <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-white/[0.06]">
+                      <strong className="text-slate-300">Location:</strong> {research.location}
+                    </p>
                   </div>
-                  <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600/50">
-                    <span className="text-xs text-slate-400 uppercase tracking-wider block">Market Position & Model</span>
-                    <p className="text-sm text-slate-200 mt-1">{research.business_model}</p>
-                    <p className="text-xs text-slate-300 mt-2"><strong>Position:</strong> {research.market_position}</p>
+
+                  <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+                    <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold block">Market Position & Model</span>
+                    <p className="text-xs text-slate-200 mt-2 leading-relaxed">{research.business_model}</p>
+                    <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-white/[0.06]">
+                      <strong className="text-slate-300">Market Position:</strong> {research.market_position}
+                    </p>
                   </div>
                 </div>
 
                 {research.recent_news && research.recent_news.length > 0 && (
-                  <div className="bg-slate-750/50 bg-slate-900/30 p-4 rounded-xl border border-slate-700">
-                    <h3 className="text-sm font-bold text-white mb-2">Public Intelligence & Recent Developments</h3>
+                  <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white mb-3 flex items-center gap-2">
+                      <Sparkles size={15} className="text-indigo-400" />
+                      Public Intelligence & Recent Developments
+                    </h3>
                     <ul className="space-y-2">
                       {research.recent_news.map((item, idx) => (
-                        <li key={idx} className="text-xs text-slate-300 flex items-start gap-2">
-                          <span className="text-blue-400">•</span>
-                          <span>{item}</span>
+                        <li key={idx} className="text-xs text-slate-300 flex items-start gap-2.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0 shadow-[0_0_6px_rgba(6,182,212,0.8)]" />
+                          <span className="leading-relaxed">{item}</span>
                         </li>
                       ))}
                     </ul>
@@ -631,9 +804,9 @@ const Dashboard: React.FC = () => {
                 )}
               </>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <Building2 size={36} className="mx-auto mb-2 text-slate-500" />
-                <p>Public company research results will appear once the research agent completes.</p>
+              <div className="text-center py-16 text-slate-400">
+                <Building2 size={36} className="mx-auto mb-2 text-slate-600" />
+                <p className="text-sm">Public company research results will appear once the research agent completes.</p>
               </div>
             )}
           </div>
@@ -645,12 +818,17 @@ const Dashboard: React.FC = () => {
             {requirements ? (
               <>
                 <div>
-                  <h2 className="text-lg font-bold text-white mb-3">Extracted Functional Requirements</h2>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                    <FileText size={16} className="text-cyan-400" />
+                    <span>Extracted Functional Requirements</span>
+                  </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {requirements.functional_requirements.map((req, idx) => (
-                      <div key={idx} className="bg-slate-700/60 border border-slate-600/60 rounded-lg p-3 flex items-start gap-2">
-                        <Check size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-slate-200">{req}</span>
+                      <div key={idx} className="glass-card p-4 rounded-xl border border-white/[0.08] hover:border-cyan-500/40 transition flex items-start gap-3">
+                        <div className="p-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 mt-0.5">
+                          <Check size={14} />
+                        </div>
+                        <span className="text-xs text-slate-200 leading-relaxed">{req}</span>
                       </div>
                     ))}
                   </div>
@@ -658,12 +836,15 @@ const Dashboard: React.FC = () => {
 
                 {requirements.non_functional_requirements && Object.keys(requirements.non_functional_requirements).length > 0 && (
                   <div>
-                    <h3 className="text-base font-bold text-white mb-3">Non-Functional & Operational Requirements</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                      <Layers size={16} className="text-purple-400" />
+                      <span>Non-Functional & Operational Requirements</span>
+                    </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {Object.entries(requirements.non_functional_requirements).map(([k, v]) => (
-                        <div key={k} className="bg-slate-700/40 border border-slate-600/40 rounded-lg p-3">
-                          <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider block capitalize">{k}</span>
-                          <span className="text-xs text-slate-200 mt-1 block">{String(v)}</span>
+                        <div key={k} className="glass-card p-4 rounded-xl border border-white/[0.08]">
+                          <span className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider block capitalize">{k}</span>
+                          <span className="text-xs text-slate-200 mt-1.5 block font-medium">{String(v)}</span>
                         </div>
                       ))}
                     </div>
@@ -671,22 +852,26 @@ const Dashboard: React.FC = () => {
                 )}
 
                 {requirements.missing_information && requirements.missing_information.length > 0 && (
-                  <div className="bg-amber-950/20 border border-amber-700/60 rounded-xl p-4">
-                    <h3 className="text-sm font-bold text-amber-300 mb-2">Unclear or Missing Requirements</h3>
-                    <div className="space-y-1.5">
+                  <div className="glass-card bg-amber-500/[0.04] border border-amber-500/30 rounded-2xl p-5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 mb-2 flex items-center gap-2">
+                      <AlertTriangle size={14} className="text-amber-400" />
+                      Unclear or Missing Requirements
+                    </h3>
+                    <div className="space-y-2 mt-3">
                       {requirements.missing_information.map((item, idx) => (
-                        <p key={idx} className="text-xs text-amber-200 flex items-center gap-1.5">
-                          <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" /> {item}
-                        </p>
+                        <div key={idx} className="text-xs text-amber-200/90 flex items-start gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
+                          <span>{item}</span>
+                        </div>
                       ))}
                     </div>
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <FileText size={36} className="mx-auto mb-2 text-slate-500" />
-                <p>Requirement analysis will populate when the pipeline runs.</p>
+              <div className="text-center py-16 text-slate-400">
+                <FileText size={36} className="mx-auto mb-2 text-slate-600" />
+                <p className="text-sm">Requirement analysis will populate when the pipeline runs.</p>
               </div>
             )}
           </div>
@@ -698,24 +883,27 @@ const Dashboard: React.FC = () => {
             {solution ? (
               <>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">Recommended Solutions (Catalog-Grounded)</h2>
-                  <span className="inline-flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-700 text-emerald-300 px-3 py-1 rounded-full text-xs font-medium">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Database size={18} className="text-indigo-400" />
+                    Recommended Solutions (Catalog-Grounded)
+                  </h2>
+                  <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-3 py-1 rounded-full text-xs font-medium backdrop-blur-md">
                     <ShieldCheck size={14} className="text-emerald-400" /> Grounded in Knowledge Base
                   </span>
                 </div>
 
                 {solution.primary_solutions && solution.primary_solutions.map((sol, idx) => (
-                  <div key={idx} className="bg-slate-750/70 bg-slate-700/50 border border-slate-600 rounded-xl p-5 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-600/60 pb-3">
+                  <div key={idx} className="glass-card p-6 rounded-2xl border border-white/[0.08] hover:border-indigo-500/40 transition space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
                       <div>
-                        <h3 className="text-xl font-bold text-white">{sol.product_name}</h3>
-                        <p className="text-xs text-slate-400">Product ID: {sol.product_name.toLowerCase().replace(/[^a-z0-9]/g, '-')}</p>
+                        <h3 className="text-lg font-bold text-white">{sol.product_name}</h3>
+                        <p className="text-[11px] text-slate-400 font-mono">Product ID: {sol.product_name.toLowerCase().replace(/[^a-z0-9]/g, '-')}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs px-3 py-1 bg-blue-900/60 border border-blue-700 rounded-lg text-blue-300 font-bold">
+                        <span className="text-xs px-3 py-1 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-indigo-300 font-bold">
                           {sol.coverage_percentage}% Requirements Match
                         </span>
-                        <span className="text-sm font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-3 py-1 rounded-lg">
+                        <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl">
                           {formatCatalogPricing(sol.pricing)}
                         </span>
                       </div>
@@ -724,10 +912,10 @@ const Dashboard: React.FC = () => {
                     {/* Matched Features */}
                     {sol.features_matched && sol.features_matched.length > 0 && (
                       <div>
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Verified Matched Capabilities</span>
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-2">Verified Matched Capabilities</span>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {sol.features_matched.map((feat, fidx) => (
-                            <div key={fidx} className="bg-slate-800/80 p-2 rounded text-xs text-slate-200 flex items-center gap-2 border border-slate-700/60">
+                            <div key={fidx} className="bg-slate-900/50 p-2.5 rounded-xl text-xs text-slate-200 flex items-center gap-2 border border-white/[0.05]">
                               <Check size={14} className="text-emerald-400 flex-shrink-0" />
                               <span>{feat}</span>
                             </div>
@@ -754,10 +942,10 @@ const Dashboard: React.FC = () => {
                 ))}
 
                 {solution.estimated_solution_value && (
-                  <div className="bg-blue-950/40 border border-blue-800/80 rounded-xl p-4 flex items-center justify-between">
+                  <div className="glass-card bg-indigo-500/[0.05] border border-indigo-500/30 rounded-2xl p-5 flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-blue-300 block">Total Estimated Solution Value</span>
-                      <span className="text-lg font-bold text-white mt-1 block">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300 block">Total Estimated Solution Value</span>
+                      <span className="text-xl font-black text-white mt-1 block">
                         {formatCatalogPricing(solution.estimated_solution_value)}
                       </span>
                     </div>
@@ -766,10 +954,10 @@ const Dashboard: React.FC = () => {
                 )}
               </>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <Database size={36} className="mx-auto mb-2 text-slate-500" />
-                <h3 className="text-lg font-bold text-white mb-1">Solution Draft Pending</h3>
-                <p className="text-sm">Grounded solutions will appear once the Solution Matching Agent completes.</p>
+              <div className="text-center py-16 text-slate-400">
+                <Database size={36} className="mx-auto mb-2 text-slate-600" />
+                <h3 className="text-base font-bold text-white mb-1">Solution Draft Pending</h3>
+                <p className="text-xs">Grounded solutions will appear once the Solution Matching Agent completes.</p>
               </div>
             )}
           </div>
@@ -781,10 +969,10 @@ const Dashboard: React.FC = () => {
             {proposal ? (
               <>
                 {/* Actions Toolbar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-700">
+                <div className="glass-card p-4 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Status:</span>
-                    <span className="text-xs bg-emerald-900/60 text-emerald-300 border border-emerald-700 px-2.5 py-1 rounded font-bold">
+                    <span className="text-xs bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full font-bold">
                       Grounded Draft Ready
                     </span>
                   </div>
@@ -793,14 +981,14 @@ const Dashboard: React.FC = () => {
                       type="button"
                       onClick={handleExportProposal}
                       disabled={exporting}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                      className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
                     >
                       <Download size={14} /> Download (.md)
                     </button>
                     <button
                       type="button"
                       onClick={() => window.print()}
-                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/[0.08] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     >
                       <Printer size={14} /> Print / PDF
                     </button>
@@ -808,10 +996,10 @@ const Dashboard: React.FC = () => {
                       type="button"
                       onClick={handleApproveProposal}
                       disabled={approving || approvedSuccess}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition ${
                         approvedSuccess
-                          ? 'bg-emerald-800 text-emerald-200 cursor-default'
-                          : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
+                          ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/50 cursor-default'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95 shadow-lg shadow-emerald-500/20'
                       }`}
                     >
                       <Check size={14} /> {approvedSuccess ? 'Approved ✓' : approving ? 'Approving...' : 'Approve Proposal'}
@@ -820,19 +1008,23 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Proposal Content Body */}
-                <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700 space-y-6">
+                <div className="glass-card p-6 sm:p-8 rounded-2xl border border-white/[0.08] space-y-6">
                   {/* Executive Summary */}
                   <div>
-                    <h2 className="text-lg font-bold text-white mb-2">1. Executive Summary</h2>
-                    <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-line bg-slate-800/60 p-4 rounded-lg border border-slate-700/60">
+                    <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                      <span className="text-indigo-400">1.</span> Executive Summary
+                    </h2>
+                    <p className="text-slate-200 text-xs leading-relaxed whitespace-pre-line bg-slate-900/60 p-4 rounded-xl border border-white/[0.05]">
                       {proposal.executive_summary}
                     </p>
                   </div>
 
                   {/* Proposed Solution */}
                   <div>
-                    <h2 className="text-lg font-bold text-white mb-2">2. Proposed Solution Architecture</h2>
-                    <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-line bg-slate-800/60 p-4 rounded-lg border border-slate-700/60">
+                    <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                      <span className="text-indigo-400">2.</span> Proposed Solution Architecture
+                    </h2>
+                    <p className="text-slate-200 text-xs leading-relaxed whitespace-pre-line bg-slate-900/60 p-4 rounded-xl border border-white/[0.05]">
                       {proposal.proposed_solution}
                     </p>
                   </div>
@@ -840,19 +1032,21 @@ const Dashboard: React.FC = () => {
                   {/* Implementation Roadmap */}
                   {proposal.implementation_roadmap && proposal.implementation_roadmap.length > 0 && (
                     <div>
-                      <h2 className="text-lg font-bold text-white mb-2">3. Implementation Roadmap</h2>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs text-slate-300 border border-slate-700 rounded-lg overflow-hidden">
-                          <thead className="bg-slate-800 text-slate-200 uppercase tracking-wider">
+                      <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                        <span className="text-indigo-400">3.</span> Implementation Roadmap
+                      </h2>
+                      <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
+                        <table className="w-full text-left text-xs text-slate-300">
+                          <thead className="bg-slate-900/80 text-slate-300 uppercase tracking-wider text-[10px]">
                             <tr>
                               <th className="p-3">Phase</th>
                               <th className="p-3">Estimated Duration</th>
                               <th className="p-3">Key Activities</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-700 bg-slate-800/40">
+                          <tbody className="divide-y divide-white/[0.05] bg-slate-950/40">
                             {proposal.implementation_roadmap.map((item, idx) => (
-                              <tr key={idx}>
+                              <tr key={idx} className="hover:bg-white/[0.02] transition">
                                 <td className="p-3 font-semibold text-white">{String(item.phase || `Phase ${idx + 1}`)}</td>
                                 <td className="p-3 text-amber-300">{String(item.duration || '2-4 weeks')}</td>
                                 <td className="p-3 text-slate-300">
@@ -869,11 +1063,13 @@ const Dashboard: React.FC = () => {
                   {/* Pricing Model */}
                   {proposal.pricing_proposal && (
                     <div>
-                      <h2 className="text-lg font-bold text-white mb-2">4. Commercial & Investment Model</h2>
-                      <div className="bg-slate-800/60 border border-slate-700/60 rounded-lg p-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                        <span className="text-indigo-400">4.</span> Commercial & Investment Model
+                      </h2>
+                      <div className="bg-slate-900/60 border border-white/[0.05] rounded-xl p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                           {Object.entries(proposal.pricing_proposal).map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center py-1.5 border-b border-slate-700/50">
+                            <div key={key} className="flex justify-between items-center py-2 border-b border-white/[0.04]">
                               <span className="capitalize text-slate-400">{key.replace(/_/g, ' ')}:</span>
                               <span className="font-bold text-emerald-400">{String(value)}</span>
                             </div>
@@ -886,11 +1082,13 @@ const Dashboard: React.FC = () => {
                   {/* SLA & Support */}
                   {proposal.support_service_levels && Object.keys(proposal.support_service_levels).length > 0 && (
                     <div>
-                      <h2 className="text-lg font-bold text-white mb-2">5. Service Levels & Compliance</h2>
+                      <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                        <span className="text-indigo-400">5.</span> Service Levels & Compliance
+                      </h2>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {Object.entries(proposal.support_service_levels).map(([k, v]) => (
-                          <div key={k} className="bg-slate-800/60 border border-slate-700/60 rounded-lg p-3 text-xs">
-                            <span className="text-slate-400 uppercase tracking-wider block capitalize">{k.replace(/_/g, ' ')}</span>
+                          <div key={k} className="bg-slate-900/60 border border-white/[0.05] rounded-xl p-3.5 text-xs">
+                            <span className="text-slate-400 uppercase tracking-wider block text-[10px]">{k.replace(/_/g, ' ')}</span>
                             <span className="text-slate-200 font-semibold mt-1 block">{String(v)}</span>
                           </div>
                         ))}
@@ -900,10 +1098,10 @@ const Dashboard: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <FileText size={36} className="mx-auto mb-2 text-slate-500" />
-                <h3 className="text-lg font-bold text-white mb-1">Proposal Draft Pending</h3>
-                <p className="text-sm">The proposal agent will draft grounded terms once solution matching is complete.</p>
+              <div className="text-center py-16 text-slate-400">
+                <FileText size={36} className="mx-auto mb-2 text-slate-600" />
+                <h3 className="text-base font-bold text-white mb-1">Proposal Draft Pending</h3>
+                <p className="text-xs">The proposal agent will draft grounded terms once solution matching is complete.</p>
               </div>
             )}
           </div>
@@ -915,11 +1113,14 @@ const Dashboard: React.FC = () => {
             {review ? (
               <>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-white">Quality Assurance & Anti-Hallucination Review</h2>
-                  <span className={`text-xs px-3 py-1 rounded-full font-bold border ${
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <ShieldCheck size={18} className="text-cyan-400" />
+                    Quality Assurance & Anti-Hallucination Review
+                  </h2>
+                  <span className={`text-xs px-3 py-1 rounded-full font-bold border backdrop-blur-md ${
                     review.readiness_assessment?.ready_to_send
-                      ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
-                      : 'bg-amber-950/60 border-amber-700 text-amber-300'
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
                   }`}>
                     {review.readiness_assessment?.ready_to_send ? 'Ready for Customer Sign-off' : 'Requires Human Review'}
                   </span>
@@ -927,15 +1128,16 @@ const Dashboard: React.FC = () => {
 
                 {/* Follow-up Questions */}
                 {review.follow_up_questions && review.follow_up_questions.length > 0 && (
-                  <div className="bg-slate-750/70 bg-slate-900/40 p-4 rounded-xl border border-slate-700">
-                    <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                      <HelpCircle size={16} className="text-blue-400" /> Follow-up Questions for Customer
+                  <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white mb-3 flex items-center gap-2">
+                      <HelpCircle size={15} className="text-cyan-400" />
+                      Follow-up Questions for Customer
                     </h3>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {review.follow_up_questions.map((q, idx) => (
-                        <div key={idx} className="bg-slate-800/80 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 flex items-start gap-2">
-                          <span className="text-blue-400 font-bold">Q{idx + 1}:</span>
-                          <span>{q}</span>
+                        <div key={idx} className="bg-slate-900/60 border border-white/[0.05] rounded-xl p-3 text-xs text-slate-200 flex items-start gap-2.5">
+                          <span className="text-cyan-400 font-bold">Q{idx + 1}:</span>
+                          <span className="leading-relaxed">{q}</span>
                         </div>
                       ))}
                     </div>
@@ -944,15 +1146,16 @@ const Dashboard: React.FC = () => {
 
                 {/* Recommended Next Steps */}
                 {review.recommended_next_steps && review.recommended_next_steps.length > 0 && (
-                  <div className="bg-slate-750/70 bg-slate-900/40 p-4 rounded-xl border border-slate-700">
-                    <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-                      <ArrowRight size={16} className="text-emerald-400" /> Recommended Next Actions
+                  <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white mb-3 flex items-center gap-2">
+                      <ArrowRight size={15} className="text-emerald-400" />
+                      Recommended Next Actions
                     </h3>
                     <ol className="space-y-2">
                       {review.recommended_next_steps.map((step, idx) => (
-                        <li key={idx} className="bg-slate-800/80 border border-slate-700 rounded-lg p-3 text-xs text-slate-200 flex items-start gap-2.5">
+                        <li key={idx} className="bg-slate-900/60 border border-white/[0.05] rounded-xl p-3 text-xs text-slate-200 flex items-start gap-2.5">
                           <span className="font-bold text-emerald-400">{idx + 1}.</span>
-                          <span>{step}</span>
+                          <span className="leading-relaxed">{step}</span>
                         </li>
                       ))}
                     </ol>
@@ -962,7 +1165,7 @@ const Dashboard: React.FC = () => {
                 {/* Claim Verification Checklist */}
                 {review.claim_verification && review.claim_verification.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-bold text-white mb-2">Claim Verification Grounding</h3>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">Claim Verification Grounding</h3>
                     <div className="space-y-2">
                       {review.claim_verification.map((claimItem, idx) => {
                         const claim = typeof claimItem === 'object' && claimItem !== null ? (claimItem as any).claim : String(claimItem);
@@ -971,12 +1174,12 @@ const Dashboard: React.FC = () => {
                           ? (claimItem as any).verified !== false && (claimItem as any).verified !== 'false'
                           : true;
                         return (
-                          <div key={idx} className="bg-slate-800 border border-slate-700/80 rounded-lg p-3 text-xs flex justify-between items-center">
-                            <span className="text-slate-200 font-medium">{claim}</span>
-                            <span className={`px-2 py-0.5 rounded font-mono text-[11px] ${
+                          <div key={idx} className="glass-card p-3 rounded-xl border border-white/[0.06] text-xs flex justify-between items-center gap-4">
+                            <span className="text-slate-200 font-medium leading-relaxed">{claim}</span>
+                            <span className={`px-2.5 py-0.5 rounded-full font-mono text-[10px] shrink-0 ${
                               verified
-                                ? 'bg-emerald-950/80 border border-emerald-800 text-emerald-300'
-                                : 'bg-rose-950/80 border border-rose-800 text-rose-300'
+                                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                                : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
                             }`}>
                               {verified ? `Verified (${source})` : 'Unverified'}
                             </span>
@@ -988,10 +1191,10 @@ const Dashboard: React.FC = () => {
                 )}
               </>
             ) : (
-              <div className="text-center py-12 text-slate-400">
-                <ShieldCheck size={36} className="mx-auto mb-2 text-slate-500" />
-                <h3 className="text-lg font-bold text-white mb-1">Review Pending</h3>
-                <p className="text-sm">Final QA and verification checks will be presented after proposal generation.</p>
+              <div className="text-center py-16 text-slate-400">
+                <ShieldCheck size={36} className="mx-auto mb-2 text-slate-600" />
+                <h3 className="text-base font-bold text-white mb-1">Review Pending</h3>
+                <p className="text-xs">Final QA and verification checks will be presented after proposal generation.</p>
               </div>
             )}
           </div>

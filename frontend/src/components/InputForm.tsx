@@ -1,8 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useLeadQualification } from '../hooks/useLeadQualification';
 import { useNavigate } from 'react-router-dom';
 import { LeadInput } from '../types';
-import { Loader, AlertCircle } from 'lucide-react';
+import {
+  Loader,
+  AlertCircle,
+  Building2,
+  User,
+  Mail,
+  Briefcase,
+  Users,
+  DollarSign,
+  Clock,
+  UploadCloud,
+  Sparkles,
+  X,
+  FileText,
+  CheckCircle2,
+  ArrowRight,
+  Zap,
+  ShieldCheck,
+  Bot,
+} from 'lucide-react';
 
 interface InputFormProps {
   onLeadSubmitted?: (leadId: string) => void;
@@ -10,8 +29,10 @@ interface InputFormProps {
 
 const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { submitLead, submitLeadDocument, loading, error, completionPercentage } = useLeadQualification();
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [formData, setFormData] = useState<LeadInput>({
     inquiry_text: '',
     company_name: '',
@@ -79,230 +100,378 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
     }
   };
 
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
+        setDocumentFile(file);
+      }
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+    <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Main Glass Panel */}
+      <div className="glass-panel rounded-3xl p-6 sm:p-10 relative overflow-hidden">
+        {/* Subtle Ambient Glow Blobs */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-gradient-to-tr from-cyan-500/15 via-blue-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+
+        {/* Hero Title & Presets */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8 relative z-10">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Tell us what you need</h2>
-            <p className="text-slate-300">
-              Describe your business need in your own words. Our AI pipeline will research the company, extract requirements,
-              qualify the opportunity, match grounded solutions, and prepare a verified draft proposal.
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-cyan-300 border border-indigo-500/30 mb-3 shadow-inner">
+              <Sparkles size={13} className="text-cyan-400" />
+              <span>Autonomous Deal Scoping & Qualification</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              Submit Customer Inquiry
+            </h1>
+            <p className="text-slate-400 text-sm mt-1.5 max-w-2xl">
+              Upload an RFP document or describe your business challenge. The 6-agent AI pipeline will perform company research, requirement extraction, qualification scoring, catalog RAG matching, and draft a verified proposal.
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Quick Presets:</span>
-            <button
-              type="button"
-              onClick={() => loadExample('pdf_processing')}
-              className="px-3 py-1.5 text-xs bg-blue-900/60 hover:bg-blue-800 text-blue-200 border border-blue-700 rounded-md font-medium transition cursor-pointer active:scale-95"
-            >
-              📄 10k PDF Document AI
-            </button>
-            <button
-              type="button"
-              onClick={() => loadExample('conversational_ai')}
-              className="px-3 py-1.5 text-xs bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 rounded-md font-medium transition cursor-pointer active:scale-95"
-            >
-              💬 Conversational Support AI
-            </button>
+
+          {/* Quick Presets */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-shrink-0 bg-slate-900/60 p-2 rounded-2xl border border-white/[0.06]">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2">Presets:</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => loadExample('pdf_processing')}
+                className="px-3 py-1.5 text-xs bg-slate-800/90 hover:bg-slate-700/90 text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 rounded-xl font-medium transition-all duration-200 cursor-pointer hover:shadow-sm hover:shadow-cyan-500/20 flex items-center gap-1.5 active:scale-95"
+              >
+                <FileText size={13} className="text-cyan-400" /> 10k PDF Doc AI
+              </button>
+              <button
+                type="button"
+                onClick={() => loadExample('conversational_ai')}
+                className="px-3 py-1.5 text-xs bg-slate-800/90 hover:bg-slate-700/90 text-purple-300 hover:text-purple-200 border border-purple-500/30 rounded-xl font-medium transition-all duration-200 cursor-pointer hover:shadow-sm hover:shadow-purple-500/20 flex items-center gap-1.5 active:scale-95"
+              >
+                <Bot size={13} className="text-purple-400" /> Support AI Agent
+              </button>
+            </div>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 bg-red-900/20 border border-red-700 rounded-lg p-4 flex gap-3">
-            <AlertCircle className="text-red-500 flex-shrink-0" size={20} />
+          <div className="mb-6 bg-red-950/40 border border-red-500/40 rounded-2xl p-4 flex items-center gap-3 text-red-200 text-sm backdrop-blur-md">
+            <AlertCircle className="text-red-400 flex-shrink-0" size={20} />
             <div>
-              <h3 className="text-red-100 font-semibold">Error</h3>
-              <p className="text-red-200 text-sm">{error}</p>
+              <span className="font-semibold block text-red-300">Submission Error</span>
+              <p className="text-xs text-red-200/90 mt-0.5">{error}</p>
             </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Customer information */}
-          <div className="border-t border-slate-700 pt-6">
-            <h3 className="text-lg font-semibold text-white mb-1">Customer information</h3>
-            <p className="text-slate-400 text-xs mb-4">Fill in the blocks below or leave blank to auto-detect from the inquiry document.</p>
-            
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Company / Organization <span className="text-blue-400">*</span>
-              </label>
-              <input
-                type="text"
-                name="company_name"
-                value={formData.company_name || ''}
-                onChange={handleChange}
-                required={!documentFile}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500"
-              />
+        <form onSubmit={handleSubmit} className="space-y-7 relative z-10">
+          {/* Section: Customer Information */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center">
+                  <Building2 size={13} className="text-blue-400" />
+                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+                  Customer & Organization Profile
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium">Auto-extracted if document attached</span>
             </div>
 
-            {/* The 6 Lead Context Blocks Grid matching user design */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {/* Primary Company Name Input */}
+            <div className="glass-input-card rounded-2xl p-3.5 focus-within:ring-2 focus-within:ring-cyan-500/30">
+              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>Company / Organization Name <span className="text-cyan-400">*</span></span>
+              </label>
+              <div className="flex items-center gap-2.5">
+                <Building2 size={18} className="text-slate-500 flex-shrink-0" />
+                <input
+                  type="text"
+                  name="company_name"
+                  value={formData.company_name || ''}
+                  onChange={handleChange}
+                  required={!documentFile}
+                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-base focus:outline-none placeholder-slate-600"
+                />
+              </div>
+            </div>
+
+            {/* The 6 Lead Context Blocks Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {/* Block 1: Contact */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Contact</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <User size={12} className="text-cyan-400" /> Contact Name
+                </label>
                 <input
                   type="text"
                   name="contact_name"
                   value={formData.contact_name || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
 
               {/* Block 2: Email */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Email</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <Mail size={12} className="text-indigo-400" /> Email Address
+                </label>
                 <input
                   type="email"
                   name="email"
                   value={formData.email || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
 
               {/* Block 3: Industry */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Industry</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <Briefcase size={12} className="text-emerald-400" /> Industry Vertical
+                </label>
                 <input
                   type="text"
                   name="industry"
                   value={formData.industry || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
 
               {/* Block 4: Company Size */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Company Size</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <Users size={12} className="text-amber-400" /> Company Size
+                </label>
                 <input
                   type="text"
                   name="company_size"
                   value={formData.company_size || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
 
               {/* Block 5: Budget */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Budget</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <DollarSign size={12} className="text-emerald-400" /> Commercial Budget
+                </label>
                 <input
                   type="text"
                   name="budget"
                   value={formData.budget || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
 
               {/* Block 6: Timeline */}
-              <div className="bg-slate-700/60 border border-slate-600 rounded-xl p-3.5 hover:border-slate-500 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
-                <label className="block text-xs text-slate-400 mb-1">Timeline</label>
+              <div className="glass-input-card rounded-2xl p-3.5">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                  <Clock size={12} className="text-purple-400" /> Target Timeline
+                </label>
                 <input
                   type="text"
                   name="timeline"
                   value={formData.timeline || ''}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-0 p-0 text-white font-semibold text-sm focus:outline-none"
+                  className="w-full bg-transparent border-0 p-0 text-white font-medium text-sm focus:outline-none"
                 />
               </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-700 pt-6">
-            <h3 className="text-lg font-semibold text-white mb-2">Inquiry Document (Optional)</h3>
-            <p className="text-slate-400 text-sm mb-3">Upload a PDF or DOCX when the customer requirements are in a document.</p>
-            <input
-              type="file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(event) => setDocumentFile(event.target.files?.[0] || null)}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-slate-300 file:mr-4 file:rounded-md file:border-0 file:bg-orange-500 file:px-3 file:py-2 file:font-semibold file:text-slate-950"
-            />
-          </div>
-
-          {/* Customer Inquiry */}
-          <div className="border-t border-slate-700 pt-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Your inquiry</h3>
-            <textarea
-              name="inquiry_text"
-              placeholder={documentFile ? "Document attached. You can optionally add extra notes or leave blank..." : "Describe your business problem, desired outcome, scale, integrations, timeline, or constraints in plain language..."}
-              value={formData.inquiry_text}
-              onChange={handleChange}
-              required={!documentFile}
-              rows={5}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Additional Context */}
-          <div className="border-t border-slate-700 pt-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Additional Context (Optional)</h3>
-            <textarea
-              name="additional_context"
-              placeholder="Any additional information about the deal, decision-makers, or special requirements..."
-              value={formData.additional_context || ''}
-              onChange={handleChange}
-              rows={3}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Progress */}
-          {loading && (
-            <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <Loader className="animate-spin text-blue-400" size={20} />
-                <span className="text-blue-100 font-semibold">Processing lead qualification...</span>
+          {/* Section: Document Upload Dropzone */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center">
+                  <UploadCloud size={13} className="text-indigo-400" />
+                </div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200">
+                  Customer RFP Document (Optional)
+                </h3>
               </div>
-              <div className="w-full bg-slate-700 rounded-full h-2">
+              <span className="text-[11px] text-slate-400">PDF or DOCX supported</span>
+            </div>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleFileDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300 relative ${
+                isDragging
+                  ? 'border-cyan-400 bg-cyan-950/30 scale-[1.01]'
+                  : documentFile
+                  ? 'border-emerald-500/50 bg-emerald-950/20'
+                  : 'border-slate-700/80 hover:border-slate-600 bg-slate-900/40 hover:bg-slate-900/60'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(e) => setDocumentFile(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+
+              {documentFile ? (
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div className="text-left">
+                    <span className="font-semibold text-white text-sm block">{documentFile.name}</span>
+                    <span className="text-xs text-emerald-400/80">{(documentFile.size / 1024).toFixed(1)} KB • Ready for extraction</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setDocumentFile(null); }}
+                    className="ml-4 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 mx-auto flex items-center justify-center text-indigo-400">
+                    <UploadCloud size={24} />
+                  </div>
+                  <div className="text-sm font-medium text-slate-300">
+                    <span className="text-cyan-400 font-semibold underline underline-offset-2">Click to browse</span> or drag and drop customer RFP
+                  </div>
+                  <p className="text-xs text-slate-500">Document parser extracts tables, OCR, requirements, and compliance rules automatically</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section: Customer Inquiry & Additional Context */}
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2 flex items-center justify-between">
+                <span>Customer Inquiry Description <span className="text-cyan-400">*</span></span>
+                {documentFile && <span className="text-slate-500 text-[11px] font-normal">Optional with document</span>}
+              </label>
+              <textarea
+                name="inquiry_text"
+                placeholder={documentFile ? "Document attached. You can optionally add deal notes or leave blank..." : "Describe the business problem, target volume (e.g. 10,000 PDFs/mo), integrations, and goals..."}
+                value={formData.inquiry_text}
+                onChange={handleChange}
+                required={!documentFile}
+                rows={4}
+                className="w-full glass-input-card rounded-2xl p-4 text-white text-sm focus:outline-none placeholder-slate-600 resize-y"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
+                Additional Context & Decision-Maker Details (Optional)
+              </label>
+              <textarea
+                name="additional_context"
+                placeholder="Key stakeholders (e.g. CIO, VP of Engineering), existing ERP/CRM systems, or security mandates..."
+                value={formData.additional_context || ''}
+                onChange={handleChange}
+                rows={2}
+                className="w-full glass-input-card rounded-2xl p-4 text-white text-sm focus:outline-none placeholder-slate-600 resize-y"
+              />
+            </div>
+          </div>
+
+          {/* Real-time Progress Animation */}
+          {loading && (
+            <div className="glass-panel rounded-2xl p-5 border border-indigo-500/40 relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <Loader className="animate-spin text-cyan-400" size={18} />
+                  <span className="text-white text-sm font-semibold tracking-wide">
+                    Executing 6-Agent Qualification Pipeline...
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-cyan-300 font-bold">{Math.round(completionPercentage)}%</span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 transition-all duration-300 relative"
                   style={{ width: `${completionPercentage}%` }}
                 />
               </div>
-              <p className="text-blue-200 text-sm mt-2">{Math.round(completionPercentage)}% complete</p>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Running Research &bull; Requirements Analysis &bull; Qualification Scoring &bull; Solution RAG &bull; Proposal Generation
+              </p>
             </div>
           )}
 
-          {/* Submit Button */}
-          <div className="border-t border-slate-700 pt-6">
-            <button
-              type="submit"
-              disabled={loading || (!formData.inquiry_text.trim() && !documentFile)}
-              className={`w-full py-3 px-6 rounded-lg font-semibold transition cursor-pointer active:scale-[0.99] ${
-                loading || (!formData.inquiry_text.trim() && !documentFile)
-                  ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              {loading ? 'Processing document & qualifying...' : documentFile ? 'Submit & Analyze Document' : 'Submit Inquiry'}
-            </button>
-          </div>
+          {/* Shimmer Submit Button */}
+          <button
+            type="submit"
+            disabled={loading || (!formData.inquiry_text.trim() && !documentFile)}
+            className={`w-full py-4 px-8 rounded-2xl font-bold text-base transition-all duration-300 flex items-center justify-center gap-3 cursor-pointer ${
+              loading || (!formData.inquiry_text.trim() && !documentFile)
+                ? 'bg-slate-800/80 text-slate-500 cursor-not-allowed border border-slate-700/50'
+                : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:scale-[1.01] active:scale-[0.99]'
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader className="animate-spin" size={20} />
+                <span>Processing AI Pipeline...</span>
+              </>
+            ) : documentFile ? (
+              <>
+                <Sparkles size={20} className="text-cyan-300" />
+                <span>Submit & Analyze RFP Document</span>
+                <ArrowRight size={18} />
+              </>
+            ) : (
+              <>
+                <Zap size={20} className="text-cyan-300" />
+                <span>Qualify Lead & Generate Proposal</span>
+                <ArrowRight size={18} />
+              </>
+            )}
+          </button>
         </form>
       </div>
 
-      {/* Information */}
+      {/* Feature Capabilities Showcase */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-          <div className="text-blue-400 text-3xl font-bold mb-2">7</div>
-          <p className="text-slate-300">Analysis Stages</p>
-          <p className="text-slate-400 text-sm mt-2">Research, Requirements, Qualification, Solution Matching, Proposal, Review</p>
+        <div className="glass-card rounded-2xl p-6">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-4">
+            <Zap size={20} />
+          </div>
+          <h4 className="text-white font-bold text-base">6 Autonomous Agents</h4>
+          <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+            Multi-stage pipeline covering Research, Requirements extraction, Qualification scoring, Solution matching, Proposal drafting, and Reviewer auditing.
+          </p>
         </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-          <div className="text-green-400 text-3xl font-bold mb-2">AI</div>
-          <p className="text-slate-300">Powered Pipeline</p>
-          <p className="text-slate-400 text-sm mt-2">LangGraph orchestrated agents with full transparency</p>
+
+        <div className="glass-card rounded-2xl p-6">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
+            <Sparkles size={20} />
+          </div>
+          <h4 className="text-white font-bold text-base">RAG Solution Grounding</h4>
+          <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+            Semantic vector embeddings via ChromaDB dynamically match customer needs against your validated product & services catalog.
+          </p>
         </div>
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-          <div className="text-purple-400 text-3xl font-bold mb-2">0-100</div>
-          <p className="text-slate-300">Lead Score</p>
-          <p className="text-slate-400 text-sm mt-2">Explainable scoring with evidence-based reasoning</p>
+
+        <div className="glass-card rounded-2xl p-6">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4">
+            <ShieldCheck size={20} />
+          </div>
+          <h4 className="text-white font-bold text-base">Grounded Proposals</h4>
+          <p className="text-slate-400 text-xs mt-1.5 leading-relaxed">
+            Reviewer Agent detects unsupported claims and verifies coverage before exporting ready-to-sign proposals in PDF, Markdown, or HTML.
+          </p>
         </div>
       </div>
     </div>
