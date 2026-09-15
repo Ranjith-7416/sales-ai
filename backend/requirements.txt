@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -25,9 +27,7 @@ alembic==1.13.0
 # Vector DB & RAG
 chromadb==0.5.3
 sentence-transformers==3.3.1
-# Pin CPU-compatible ARM64 wheels instead of resolving the newest CUDA stack.
-torch==2.6.0
-torchvision==0.21.0
+torch>=2.2.0
 
 # Caching
 redis==5.0.0
