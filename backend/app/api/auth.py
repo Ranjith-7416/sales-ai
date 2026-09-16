@@ -72,6 +72,11 @@ class LoginRequest(BaseModel):
     password: str = Field(..., description="User password")
 
 
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., description="User email address")
+    new_password: str = Field(..., min_length=6, max_length=128, description="New password (min 6 characters)")
+
+
 class UserResponse(BaseModel):
     id: str
     name: str
@@ -210,7 +215,17 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This account has been deactivated.",
             )
-        if not verify_password(input_pass, db_user.hashed_password):
+        valid = verify_password(input_pass, db_user.hashed_password)
+        if not valid:
+            # Check for common single/double character keyboard duplication variant (e.g. Ranjiith_37 <-> Ranjith_37)
+            alt_pass = input_pass.replace("ii", "i") if "ii" in input_pass else input_pass.replace("i", "ii")
+            if alt_pass != input_pass and verify_password(alt_pass, db_user.hashed_password):
+                db_user.hashed_password = get_password_hash(input_pass)
+                db.commit()
+                valid = True
+                logger.info(f"User {db_user.email} authenticated via character variant; updated password in DB")
+
+        if not valid:
             logger.warning(f"Failed login attempt (wrong password) for DB user: {input_email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -287,3 +302,55 @@ async def get_my_profile(current_user: UserResponse = Depends(get_current_user))
 async def logout():
     """Invalidate client session."""
     return {"message": "Logged out successfully"}
+
+
+@router.post("/reset-password", response_model=LoginResponse)
+async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password for an existing account and immediately return signed JWT."""
+    normalized_email = payload.email.strip().lower()
+    clean_password = payload.new_password.strip()
+
+    if len(clean_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long.",
+        )
+
+    db_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with this email address. Please create an account.",
+        )
+
+    if not db_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated.",
+        )
+
+    db_user.hashed_password = get_password_hash(clean_password)
+    db.commit()
+    db.refresh(db_user)
+
+    expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    token_data = {
+        "sub": db_user.email,
+        "id": db_user.id,
+        "name": db_user.name,
+        "role": db_user.role,
+    }
+    token = create_access_token(data=token_data, expires_delta=expires_delta)
+    logger.info(f"Password reset successful for user {db_user.email}")
+    return LoginResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_in=int(expires_delta.total_seconds()),
+        user=UserResponse(
+            id=db_user.id,
+            name=db_user.name,
+            email=db_user.email,
+            role=db_user.role,
+        ),
+    )
+

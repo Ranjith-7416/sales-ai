@@ -9,6 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  resetPassword: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -110,6 +111,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     authClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   }, []);
 
+  const resetPassword = useCallback(async (email: string, password: string) => {
+    const res = await authClient.post<LoginResponse>('/auth/reset-password', {
+      email,
+      new_password: password,
+    });
+
+    const { access_token, user: userData } = res.data;
+    setToken(access_token);
+    setUser(userData);
+    localStorage.setItem('salesai_token', access_token);
+    localStorage.setItem('salesai_user', JSON.stringify(userData));
+    axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    authClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+  }, []);
+
   const logout = useCallback(() => {
     try {
       authClient.post('/auth/logout').catch(() => {});
@@ -132,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!token,
         login,
         register,
+        resetPassword,
         logout,
       }}
     >

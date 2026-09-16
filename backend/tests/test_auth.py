@@ -154,3 +154,42 @@ def test_customer_registration_and_login():
     )
     assert bad_login.status_code == 401
 
+
+def test_login_character_variant_and_reset_password():
+    """Verify single/double character variant (e.g. Ranjiith <-> Ranjith) and reset-password endpoint."""
+    import uuid
+    email = f"variant_{uuid.uuid4().hex[:8]}@example.com"
+    registered_pass = "Ranjith_37"
+    variant_pass = "Ranjiith_37"
+
+    # Register with 1 'i'
+    res = client.post(
+        "/api/auth/register",
+        json={"name": "Ranjith Kumar", "email": email, "password": registered_pass},
+    )
+    assert res.status_code == 201
+
+    # Login with 2 'i's (common mobile keyboard double-tap)
+    login_variant = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": variant_pass},
+    )
+    assert login_variant.status_code == 200
+    assert "access_token" in login_variant.json()
+
+    # Reset password
+    reset_res = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "new_password": "NewSecretPassword99!"},
+    )
+    assert reset_res.status_code == 200
+    assert "access_token" in reset_res.json()
+
+    # Login with new password
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "NewSecretPassword99!"},
+    )
+    assert new_login.status_code == 200
+
+
