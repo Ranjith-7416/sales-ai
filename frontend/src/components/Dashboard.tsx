@@ -32,6 +32,7 @@ import {
   Layers,
   FileDown,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 
 import { API_BASE_URL } from '../config';
@@ -101,6 +102,7 @@ const Dashboard: React.FC = () => {
   const [approving, setApproving] = useState(false);
   const [approvedSuccess, setApprovedSuccess] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [generatingProposal, setGeneratingProposal] = useState(false);
   const [proposalNotification, setProposalNotification] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -343,34 +345,86 @@ const Dashboard: React.FC = () => {
     return err?.message || fallback;
   };
 
+  const handleGenerateProposal = async (regenerate: boolean = false) => {
+    if (!leadId) return;
+    setGeneratingProposal(true);
+    setProposalNotification(null);
+    try {
+      const res = await api.generateProposal(leadId, regenerate);
+      const generated = res?.proposal;
+      if (generated) {
+        setLead((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            proposal_result: generated,
+            result: prev.result
+              ? {
+                  ...prev.result,
+                  proposal_result: generated,
+                  proposal: generated,
+                }
+              : {
+                  proposal_result: generated,
+                  proposal: generated,
+                },
+          };
+        });
+        setProposalNotification({
+          type: 'success',
+          message: regenerate
+            ? '✨ Grounded proposal regenerated successfully from updated requirements.'
+            : '✨ Grounded proposal generated successfully and ready for review/approval.',
+        });
+      }
+    } catch (err: any) {
+      console.error('Generation failed:', err);
+      const errMsg = getErrorMessage(err, 'Failed to generate proposal');
+      setProposalNotification({
+        type: 'error',
+        message: `Failed to generate proposal: ${errMsg}`,
+      });
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
+
   const handleApproveProposal = async () => {
     if (!leadId) return;
     setApproving(true);
     setProposalNotification(null);
     try {
-      await api.approveProposal(leadId, 'Sales AI Reviewer');
+      const res = await api.approveProposal(leadId, 'Sales AI Reviewer');
       setApprovedSuccess(true);
 
-      // Instantly update local state
+      const returnedProposal = res?.proposal;
+
+      // Instantly update local state with returned approved proposal
       setLead((prev) => {
         if (!prev) return prev;
-        const updatedProposal = prev.proposal_result
-          ? {
-              ...prev.proposal_result,
-              proposal_status: 'approved',
-              status: 'approved',
-              approved_by: 'Sales AI Reviewer',
-              approved_at: new Date().toISOString(),
-            }
-          : prev.proposal_result;
+        const baseProposal = returnedProposal || prev.proposal_result || prev.result?.proposal_result || {};
+        const updatedProposal = {
+          ...baseProposal,
+          proposal_status: 'approved',
+          status: 'approved',
+          approved_by: res?.approved_by || 'Sales AI Reviewer',
+          approved_at: res?.approved_at || new Date().toISOString(),
+        };
 
         return {
           ...prev,
-          lead_status:
-            prev.lead_status === 'Low Priority' || prev.lead_status === 'Needs More Information'
-              ? 'Qualified'
-              : prev.lead_status,
+          lead_status: 'Qualified',
           proposal_result: updatedProposal,
+          result: prev.result
+            ? {
+                ...prev.result,
+                proposal_result: updatedProposal,
+                proposal: updatedProposal,
+              }
+            : {
+                proposal_result: updatedProposal,
+                proposal: updatedProposal,
+              },
         };
       });
 
@@ -1163,6 +1217,20 @@ const Dashboard: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      onClick={() => handleGenerateProposal(true)}
+                      disabled={generatingProposal || approving}
+                      title="Re-generate proposal from latest requirements"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/[0.08] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+                    >
+                      {generatingProposal ? (
+                        <Loader size={14} className="animate-spin text-white" />
+                      ) : (
+                        <RefreshCw size={14} className="text-slate-400" />
+                      )}
+                      Regenerate
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => window.print()}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/[0.08] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                     >
@@ -1346,7 +1414,25 @@ const Dashboard: React.FC = () => {
               <div className="text-center py-16 text-slate-400">
                 <FileText size={36} className="mx-auto mb-2 text-slate-600" />
                 <h3 className="text-base font-bold text-white mb-1">Proposal Draft Pending</h3>
-                <p className="text-xs">The proposal agent will draft grounded terms once solution matching is complete.</p>
+                <p className="text-xs max-w-md mx-auto mb-5">
+                  A proposal has not yet been generated for this lead. Click below to generate a catalog-grounded draft ready for review and delivery.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleGenerateProposal(false)}
+                  disabled={generatingProposal}
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold inline-flex items-center gap-2 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
+                >
+                  {generatingProposal ? (
+                    <>
+                      <Loader size={15} className="animate-spin text-white" /> Generating Grounded Proposal...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={15} className="text-amber-300" /> Generate Proposal Now
+                    </>
+                  )}
+                </button>
               </div>
             )}
           </div>

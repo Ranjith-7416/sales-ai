@@ -137,6 +137,21 @@ export const useApi = () => {
     }
   }, []);
 
+  const generateProposal = useCallback(async (leadId: string, regenerate: boolean = false) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiClient.post(`/proposals/${leadId}/generate`, { regenerate });
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const approveProposal = useCallback(async (leadId: string, approvedBy: string = 'Sales AI Reviewer') => {
     setLoading(true);
     setError(null);
@@ -307,6 +322,7 @@ export const useApi = () => {
     listLeads,
     requalifyLead,
     getProposal,
+    generateProposal,
     approveProposal,
     sendProposal,
     exportProposal,
@@ -329,6 +345,7 @@ export const useApi = () => {
     listLeads,
     requalifyLead,
     getProposal,
+    generateProposal,
     approveProposal,
     sendProposal,
     exportProposal,

@@ -9,6 +9,7 @@ from app.schemas import LeadInputSchema, LeadResponse
 from app.status_utils import normalize_lead_status
 from app.services.document_processor import get_document_processor
 from app.security import rate_limit, require_auth
+from app.services.proposal_generator import ensure_lead_proposal
 from app.config import settings
 from datetime import datetime
 import uuid
@@ -285,39 +286,11 @@ async def get_lead(lead_id: str, db: Session = Depends(get_db)):
                 "concerns_flags": ["Ensure enterprise SOC 2 and ISO compliance in document processing"],
             }
 
-        if not result.get("proposal_result") and lead.proposal_result:
+        if not lead.proposal_result or not result.get("proposal_result"):
+            proposal_data = ensure_lead_proposal(lead, db)
+            result["proposal_result"] = proposal_data
+        else:
             result["proposal_result"] = lead.proposal_result
-        elif not result.get("proposal_result"):
-            company = lead.company_name or "Valued Client"
-            result["proposal_result"] = {
-                "title": f"Enterprise AI Solution Proposal for {company}",
-                "executive_summary": f"This proposal delivers DocumentAI Pro for {company}. It addresses customer requirements with OCR with 99.8% accuracy, Layout-aware extraction, Batch processing capability.",
-                "customer_requirements": [
-                    "Extract structured text and form data from approximately 10,000 PDF documents per month",
-                    "High-accuracy Optical Character Recognition (OCR > 99%)",
-                    "Layout-aware table and tabular data parsing",
-                    "REST API and webhook integration with existing enterprise warehouse",
-                ],
-                "proposed_solution": "DocumentAI Pro provides OCR with 99.8% accuracy, Layout-aware extraction, Batch processing capability.",
-                "implementation_roadmap": [
-                    {"phase": "Phase 1: Architecture & Integration Setup", "duration": "2 weeks", "activities": ["Requirement validation", "API connector setup", "Schema definition"]},
-                    {"phase": "Phase 2: Validation & Deployment", "duration": "2 weeks", "activities": ["Accuracy tuning", "Security audit", "Production go-live"]},
-                ],
-                "total_implementation_timeline": "2-4 weeks",
-                "pricing_proposal": {
-                    "monthly_subscription": "$5,000/month",
-                    "onboarding_and_configuration": "$10,000 (one-time)",
-                },
-                "support_service_levels": {"support_level": "24/7 Premium", "uptime_sla": "99.95%"},
-                "success_metrics": ["OCR with 99.8% accuracy for batch processing capability", "99.95% uptime SLA guaranteed"],
-                "next_steps": ["Review proposal and technical requirements", "Finalize delivery timeline of 2-4 weeks", "Sign order form and schedule kickoff"],
-                "sections": [
-                    {"title": "Executive Summary", "content": f"DocumentAI Pro enterprise-grade solution designed to fulfill core requirements for {company}."},
-                    {"title": "Solution Architecture", "content": "DocumentAI Pro features OCR with 99.8% accuracy, Layout-aware extraction, Batch processing capability."},
-                ],
-                "proposal_status": "draft",
-                "certifications": ["ISO 27001", "SOC 2 Type II", "GDPR Compliant", "HIPAA Ready"],
-            }
 
         if not result.get("solution_matching_result") and lead.solution_matching_result:
             result["solution_matching_result"] = lead.solution_matching_result
@@ -515,7 +488,7 @@ async def requalify_lead(lead_id: str, db: Session = Depends(get_db)):
 @router.get("")
 async def list_leads(
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 50,
     status: str = None,
     search: str = None,
     db: Session = Depends(get_db),

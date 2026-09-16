@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import Proposal, Lead, UserActivity
 from app.security import rate_limit, require_auth
 from app.services.email_service import dispatch_proposal_email, build_proposal_email_content, validate_email_address
+from app.services.proposal_generator import ensure_lead_proposal
 from app.config import settings
 from datetime import datetime
 
@@ -28,28 +29,31 @@ class ProposalSendRequest(BaseModel):
     recipient_email: Optional[str] = Field(default=None, description="Recipient email address")
 
 
+class ProposalGenerateRequest(BaseModel):
+    regenerate: Optional[bool] = Field(default=False, description="Force re-generation even if proposal exists")
+
+
 @router.get("/{lead_id}")
 async def get_proposal(lead_id: str, db: Session = Depends(get_db)):
-    """Get proposal for a lead"""
+    """Get proposal for a lead (automatically generates or recovers if not yet created)"""
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
-        if not lead.proposal_result:
-            raise HTTPException(status_code=404, detail="No proposal generated yet")
+        proposal_data = ensure_lead_proposal(lead, db)
         
         # Determine proposal status from lead or proposal record
         proposal_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).order_by(Proposal.created_at.desc()).first()
-        status = proposal_record.status if proposal_record else lead.proposal_result.get("proposal_status", "draft")
+        status = proposal_record.status if proposal_record else proposal_data.get("proposal_status", "draft")
 
         return {
             "lead_id": lead_id,
-            "proposal": lead.proposal_result,
+            "proposal": proposal_data,
             "status": status,
-            "approved_by": proposal_record.approved_by if proposal_record else lead.proposal_result.get("approved_by"),
-            "approved_at": proposal_record.approved_at if proposal_record else lead.proposal_result.get("approved_at"),
+            "approved_by": proposal_record.approved_by if proposal_record else proposal_data.get("approved_by"),
+            "approved_at": proposal_record.approved_at if proposal_record else proposal_data.get("approved_at"),
             "created_at": lead.updated_at,
         }
     
@@ -60,6 +64,34 @@ async def get_proposal(lead_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{lead_id}/generate", dependencies=[Depends(require_auth), Depends(rate_limit("RATE_LIMIT_PROPOSAL_REQUESTS"))])
+async def generate_proposal_endpoint(
+    lead_id: str,
+    payload: Optional[ProposalGenerateRequest] = Body(None),
+    db: Session = Depends(get_db),
+):
+    """Explicitly generate or re-generate a grounded proposal for a lead"""
+    try:
+        lead = db.query(Lead).filter(Lead.id == lead_id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        force_regen = payload.regenerate if payload else False
+        proposal_data = ensure_lead_proposal(lead, db, force_regenerate=force_regen)
+
+        return {
+            "message": "Proposal generated successfully",
+            "lead_id": lead_id,
+            "status": proposal_data.get("proposal_status", "draft"),
+            "proposal": proposal_data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating proposal for lead {lead_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{lead_id}/approve", dependencies=[Depends(require_auth), Depends(rate_limit("RATE_LIMIT_PROPOSAL_REQUESTS"))])
 async def approve_proposal(
     lead_id: str,
@@ -67,15 +99,15 @@ async def approve_proposal(
     approved_by: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """Approve a proposal (supports JSON body or query param)"""
+    """Approve a proposal (supports JSON body or query param; automatically generates proposal if missing)"""
     try:
         lead = db.query(Lead).filter(Lead.id == lead_id).first()
         
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
-        if not lead.proposal_result:
-            raise HTTPException(status_code=404, detail="No proposal to approve")
+        # Ensure proposal exists — auto-generates or recovers if not yet generated!
+        proposal_data = ensure_lead_proposal(lead, db)
 
         # Resolve approved_by from body payload, query parameter, or default
         effective_approved_by = "Sales AI Reviewer"
@@ -114,8 +146,21 @@ async def approve_proposal(
             lead.proposal_result = updated_prop
         
         # When human approves, promote status to Qualified if it was pending or info needed
-        if lead.lead_status in ["Needs More Information", "Low Priority", "Under Review", "Pending Review"]:
+        if lead.lead_status in ["Needs More Information", "Low Priority", "Under Review", "Pending Review", "Processing", "New"]:
             lead.lead_status = "Qualified"
+
+        # Record activity in audit log
+        audit_log = UserActivity(
+            id=str(uuid.uuid4()),
+            action="proposal_approved",
+            lead_id=lead_id,
+            details={
+                "approved_by": effective_approved_by,
+                "timestamp": now.isoformat(),
+            },
+            created_at=now,
+        )
+        db.add(audit_log)
 
         lead.updated_at = now
         db.commit()
@@ -169,27 +214,10 @@ async def send_proposal(
         if not target_email:
             raise HTTPException(status_code=400, detail="recipient_email is required")
 
-        # Fallback if proposal_result is in pipeline_result
-        if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
-            lead.proposal_result = lead.pipeline_result.get("proposal")
+        # Ensure proposal is available (auto-generate or recover if not yet created)
+        ensure_lead_proposal(lead, db)
 
         now = datetime.utcnow()
-
-        # Fallback if proposal_result is in pipeline_result
-        if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
-            lead.proposal_result = lead.pipeline_result.get("proposal")
-
-        if not lead.proposal_result:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "status": "failed",
-                    "recipient": target_email or "",
-                    "message": "Cannot send proposal: No proposal has been generated for this lead yet.",
-                    "error": "No proposal generated",
-                },
-            )
 
         # 1. Validate recipient email
         is_valid, validation_msg = validate_email_address(target_email)
@@ -335,10 +363,7 @@ async def export_proposal(lead_id: str, format: str = "markdown", db: Session = 
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    if not lead.proposal_result:
-        raise HTTPException(status_code=404, detail="No proposal generated yet for this lead")
-
-    p = lead.proposal_result
+    p = ensure_lead_proposal(lead, db)
     company = lead.company_name or "Valued Client"
     date_str = datetime.utcnow().strftime("%B %d, %Y")
 
@@ -468,18 +493,15 @@ async def view_proposal_email_html(lead_id: str, request: Request, db: Session =
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
-        lead.proposal_result = lead.pipeline_result.get("proposal")
-    if not lead.proposal_result:
-        raise HTTPException(status_code=404, detail="No proposal generated yet")
+    proposal_data = ensure_lead_proposal(lead, db)
 
-    target_email = lead.proposal_result.get("sent_to") or lead.email or "client@example.com"
+    target_email = proposal_data.get("sent_to") or lead.email or "client@example.com"
     company = lead.company_name or "Valued Client"
 
     _, html_content = build_proposal_email_content(
         recipient_email=target_email,
         company_name=company,
-        proposal_data=lead.proposal_result,
+        proposal_data=proposal_data,
         lead_id=lead_id,
         request=request,
     )
@@ -502,9 +524,8 @@ async def accept_proposal_page(lead_id: str, db: Session = Depends(get_db)):
             </body></html>"""
         )
 
-    # Recover proposal if nested
-    if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
-        lead.proposal_result = lead.pipeline_result.get("proposal")
+    # Ensure proposal is available
+    ensure_lead_proposal(lead, db)
 
     now = datetime.utcnow()
     lead.lead_status = "Qualified"
