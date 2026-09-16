@@ -480,9 +480,9 @@ def dispatch_proposal_email(
         msg.attach(part2)
 
         if settings.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6)
         else:
-            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6)
             server.ehlo()
             if settings.SMTP_USE_TLS:
                 server.starttls()
