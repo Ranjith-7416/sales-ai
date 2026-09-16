@@ -22,16 +22,17 @@ class CacheService:
                 self.redis_client = redis.from_url(
                     settings.REDIS_URL,
                     decode_responses=True,
+                    max_connections=20,
                     socket_timeout=settings.REDIS_TIMEOUT_SECONDS,
                     socket_connect_timeout=settings.REDIS_TIMEOUT_SECONDS,
                 )
                 self.redis_client.ping()
-                logger.info("Redis connection established")
+                logger.info("Redis connection established with connection pooling")
             except Exception as e:
                 logger.warning(f"Redis connection failed: {str(e)}. Using in-memory cache.")
                 self.redis_client = None
 
-    async def get(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get(self, key: str) -> Optional[Any]:
         """Get value from cache"""
         try:
             if self.redis_client:
@@ -44,7 +45,7 @@ class CacheService:
             logger.warning(f"Cache get failed for key {key}: {str(e)}")
         return None
 
-    async def set(self, key: str, value: Dict[str, Any], ttl: int = 3600):
+    async def set(self, key: str, value: Any, ttl: int = 3600):
         """Set value in cache with TTL (default 1 hour)"""
         try:
             value_json = json.dumps(value)
@@ -75,6 +76,18 @@ class CacheService:
         except Exception as e:
             logger.warning(f"Cache clear failed: {str(e)}")
 
+    def cache_key_scoring(self) -> str:
+        """Generate cache key for scoring configuration"""
+        return "config:scoring"
+
+    def cache_key_products(self) -> str:
+        """Generate cache key for knowledge base products list"""
+        return "kb:products"
+
+    def cache_key_services(self) -> str:
+        """Generate cache key for knowledge base services list"""
+        return "kb:services"
+
     def cache_key_search(self, company_name: str) -> str:
         """Generate cache key for company search"""
         return f"search:company:{company_name.lower().replace(' ', '_')}"
@@ -83,9 +96,14 @@ class CacheService:
         """Generate cache key for lead qualification"""
         return f"qualification:{lead_id}"
 
-    def cache_key_kb_search(self, query: str) -> str:
+    def cache_key_kb_search(self, query: str, entry_type: str = "product") -> str:
         """Generate cache key for KB search"""
-        return f"kb_search:{query.lower().replace(' ', '_')}"
+        return f"kb_search:{entry_type}:{query.lower().replace(' ', '_')}"
+
+    async def invalidate_kb(self):
+        """Invalidate all cached knowledge base entries and search results"""
+        await self.delete("kb:products")
+        await self.delete("kb:services")
 
 
 # Singleton instance

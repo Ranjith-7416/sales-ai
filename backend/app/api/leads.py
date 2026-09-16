@@ -1,7 +1,8 @@
 """Leads API Routes"""
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, Form, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from sqlalchemy.orm import Session, defer
 from app.database import get_db
 from app.models import Lead, UserActivity, LeadMemory
 from app.schemas import LeadInputSchema, LeadResponse
@@ -447,15 +448,48 @@ async def list_leads(
     skip: int = 0,
     limit: int = 20,
     status: str = None,
+    search: str = None,
     db: Session = Depends(get_db),
 ):
-    """List all leads"""
+    """List leads with database-level filtering, search, and pagination."""
     try:
-        query = db.query(Lead).order_by(Lead.created_at.desc())
-        
-        leads_list = query.all()
+        query = db.query(Lead)
+
+        # 1. Database-level status filter
+        if status and status != "all":
+            query = query.filter(Lead.lead_status == status)
+
+        # 2. Database-level search across company, contact, email, inquiry, and industry
+        if search and search.strip():
+            search_pattern = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    Lead.company_name.ilike(search_pattern),
+                    Lead.contact_name.ilike(search_pattern),
+                    Lead.email.ilike(search_pattern),
+                    Lead.inquiry_text.ilike(search_pattern),
+                    Lead.industry.ilike(search_pattern),
+                )
+            )
+
+        # 3. Database-level count for efficient pagination metadata
+        total = query.count()
+
+        # 4. Database-level pagination with column pruning (defer bulky unused JSON blobs)
+        leads_page = (
+            query.options(
+                defer(Lead.proposal_result),
+                defer(Lead.reviewer_result),
+                defer(Lead.research_result),
+            )
+            .order_by(Lead.created_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
         lead_cards = []
-        for lead in leads_list:
+        for lead in leads_page:
             completeness = sum(bool(value) for value in (
                 lead.company_name,
                 lead.industry,
@@ -475,6 +509,8 @@ async def list_leads(
                 missing_information = _missing_customer_information(lead)
             if lead.lead_status == "Processing":
                 current_status = "Processing"
+            elif lead.completed_at and lead.lead_status in ("Qualified", "Needs More Information", "Low Priority"):
+                current_status = lead.lead_status
             else:
                 current_status = normalize_lead_status(
                     lead.lead_status,
@@ -501,11 +537,6 @@ async def list_leads(
                 "created_at": lead.created_at,
             })
 
-        if status:
-            lead_cards = [lead for lead in lead_cards if lead["lead_status"] == status]
-        total = len(lead_cards)
-        lead_cards = lead_cards[skip:skip + limit]
-        
         return {
             "total": total,
             "skip": skip,

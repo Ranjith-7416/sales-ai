@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 from app.config import settings
+from app.services.cache_service import get_cache_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,8 +22,13 @@ class ScoringConfigSchema(BaseModel):
 
 @router.get("/scoring")
 async def get_scoring_config():
-    """Retrieve current lead qualification scoring criteria and weights"""
-    return {
+    """Retrieve current lead qualification scoring criteria and weights (cached in Redis)"""
+    cache = get_cache_service()
+    cached = await cache.get(cache.cache_key_scoring())
+    if cached:
+        return cached
+
+    config_data = {
         "qualified_threshold": settings.QUALIFIED_SCORE_THRESHOLD,
         "needs_info_threshold": settings.NEEDS_INFO_SCORE_THRESHOLD,
         "fit_weight": settings.FIT_SCORE_WEIGHT,
@@ -31,6 +37,8 @@ async def get_scoring_config():
         "risk_weight": settings.RISK_SCORE_WEIGHT,
         "formula": "Score = (Fit * fit_weight) + (Readiness * readiness_weight) + (Opportunity * opportunity_weight) + ((100 - Risk) * risk_weight)",
     }
+    await cache.set(cache.cache_key_scoring(), config_data, ttl=300)
+    return config_data
 
 
 @router.post("/scoring")
@@ -58,6 +66,9 @@ async def update_scoring_config(config: ScoringConfigSchema):
 
     logger.info("Scoring configuration updated: fit=%.2f, ready=%.2f, opp=%.2f, risk=%.2f",
                 config.fit_weight, config.readiness_weight, config.opportunity_weight, config.risk_weight)
+
+    cache = get_cache_service()
+    await cache.delete(cache.cache_key_scoring())
 
     return {
         "message": "Scoring configuration updated successfully",

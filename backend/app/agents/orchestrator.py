@@ -149,14 +149,13 @@ class SalesOrchestrator:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
-        """Build LangGraph workflow"""
+        """Build LangGraph workflow with parallelized independent stages"""
         workflow = StateGraph(dict)
 
         # Add nodes for each agent
         workflow.add_node("research", self._node_research)
         workflow.add_node("requirements", self._node_requirements)
-        workflow.add_node("qualification", self._node_qualification)
-        workflow.add_node("solution_matching", self._node_solution_matching)
+        workflow.add_node("qualification_and_solution", self._node_qualification_and_solution)
         workflow.add_node("proposal", self._node_proposal)
         workflow.add_node("reviewer", self._node_reviewer)
         workflow.add_node("complete", self._node_complete)
@@ -164,11 +163,10 @@ class SalesOrchestrator:
         # Set entry point
         workflow.set_entry_point("research")
 
-        # Add edges - sequential pipeline
+        # Add edges - parallel execution of independent qualification & solution matching
         workflow.add_edge("research", "requirements")
-        workflow.add_edge("requirements", "qualification")
-        workflow.add_edge("qualification", "solution_matching")
-        workflow.add_edge("solution_matching", "proposal")
+        workflow.add_edge("requirements", "qualification_and_solution")
+        workflow.add_edge("qualification_and_solution", "proposal")
         workflow.add_edge("proposal", "reviewer")
         workflow.add_edge("reviewer", "complete")
         workflow.add_edge("complete", END)
@@ -226,6 +224,68 @@ class SalesOrchestrator:
                 state["errors"].append({"stage": "requirements", "error": str(e)})
             _record_agent_execution(state.get("lead_id", ""), "requirements_agent", "requirements", error_message=str(e))
         
+        return state
+
+    async def _node_qualification_and_solution(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute qualification and solution matching concurrently as independent stages"""
+        if _has_provider_quota_error(state):
+            return state
+
+        async def _run_qual():
+            try:
+                logger.info(f"Starting qualification stage for lead {state.get('lead_id')}")
+                result = await run_qualification_agent(
+                    research_result=state.get("research_result"),
+                    requirements_result=state.get("requirements_result"),
+                )
+                _record_agent_execution(state.get("lead_id", ""), "qualification_agent", "qualification", result)
+                logger.info(f"Qualification completed for lead {state.get('lead_id')}")
+                return ("qualification", result, None)
+            except Exception as e:
+                if isinstance(e, ProviderQuotaError):
+                    _record_provider_quota_error(state, "qualification", e)
+                logger.error(f"Qualification stage failed: {str(e)}")
+                _record_agent_execution(state.get("lead_id", ""), "qualification_agent", "qualification", error_message=str(e))
+                return ("qualification", None, e)
+
+        async def _run_solution():
+            if _has_missing_information(state):
+                logger.info("Skipping solution matching until required customer information is provided")
+                return ("solution_matching", None, None)
+            try:
+                logger.info(f"Starting solution matching stage for lead {state.get('lead_id')}")
+                result = await run_solution_agent(
+                    requirements_result=state.get("requirements_result"),
+                    company_size=state.get("company_size"),
+                    budget=state.get("budget"),
+                )
+                _record_agent_execution(state.get("lead_id", ""), "solution_agent", "solution_matching", result)
+                logger.info(f"Solution matching completed for lead {state.get('lead_id')}")
+                return ("solution_matching", result, None)
+            except Exception as e:
+                if isinstance(e, ProviderQuotaError):
+                    _record_provider_quota_error(state, "solution_matching", e)
+                logger.error(f"Solution matching stage failed: {str(e)}")
+                _record_agent_execution(state.get("lead_id", ""), "solution_agent", "solution_matching", error_message=str(e))
+                return ("solution_matching", None, e)
+
+        # Run independent stages concurrently!
+        qual_res, sol_res = await asyncio.gather(_run_qual(), _run_solution())
+
+        if qual_res[1] is not None:
+            state["qualification_result"] = qual_res[1]
+            state["stages_completed"].append("qualification")
+        elif qual_res[2] is not None and not isinstance(qual_res[2], ProviderQuotaError):
+            state["errors"].append({"stage": "qualification", "error": str(qual_res[2])})
+
+        if sol_res[1] is not None:
+            state["solution_matching_result"] = sol_res[1]
+            state["stages_completed"].append("solution_matching")
+        elif sol_res[2] is not None and not isinstance(sol_res[2], ProviderQuotaError):
+            state["errors"].append({"stage": "solution_matching", "error": str(sol_res[2])})
+
+        await _notify_progress(state, "qualification")
+        await _notify_progress(state, "solution_matching")
         return state
 
     async def _node_qualification(self, state: Dict[str, Any]) -> Dict[str, Any]:

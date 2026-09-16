@@ -14,7 +14,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = rawApiUrl.endsWith('/api')
+  ? rawApiUrl
+  : (rawApiUrl.startsWith('http') ? `${rawApiUrl.replace(/\/$/, '')}/api` : rawApiUrl);
+
+// Configured auth client with explicit 15s timeout to prevent hanging 'Authenticating...' state
+const authClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 15000,
+});
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('salesai_token'));
@@ -32,9 +41,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      authClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       localStorage.setItem('salesai_token', token);
     } else {
       delete axios.defaults.headers.common['Authorization'];
+      delete authClient.defaults.headers.common['Authorization'];
       localStorage.removeItem('salesai_token');
       localStorage.removeItem('salesai_user');
     }
@@ -50,7 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        const res = await axios.get(`${API_BASE_URL}/auth/me`, {
+        const res = await authClient.get('/auth/me', {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
         setUser(res.data);
@@ -69,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await axios.post<LoginResponse>(`${API_BASE_URL}/auth/login`, {
+    const res = await authClient.post<LoginResponse>('/auth/login', {
       email,
       password,
     });
@@ -80,10 +91,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('salesai_token', access_token);
     localStorage.setItem('salesai_user', JSON.stringify(userData));
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    authClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    const res = await axios.post<LoginResponse>(`${API_BASE_URL}/auth/register`, {
+    const res = await authClient.post<LoginResponse>('/auth/register', {
       name,
       email,
       password,
@@ -95,17 +107,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('salesai_token', access_token);
     localStorage.setItem('salesai_user', JSON.stringify(userData));
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    authClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   }, []);
 
   const logout = useCallback(() => {
     try {
-      axios.post(`${API_BASE_URL}/auth/logout`).catch(() => {});
+      authClient.post('/auth/logout').catch(() => {});
     } finally {
       setToken(null);
       setUser(null);
       localStorage.removeItem('salesai_token');
       localStorage.removeItem('salesai_user');
       delete axios.defaults.headers.common['Authorization'];
+      delete authClient.defaults.headers.common['Authorization'];
     }
   }, []);
 

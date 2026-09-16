@@ -102,7 +102,7 @@ export const useApi = () => {
     }
   }, []);
 
-  const listLeads = useCallback(async (skip = 0, limit = 20, status?: string) => {
+  const listLeads = useCallback(async (skip = 0, limit = 20, status?: string, search?: string) => {
     setLoading(true);
     setError(null);
 
@@ -111,6 +111,7 @@ export const useApi = () => {
       params.append('skip', skip.toString());
       params.append('limit', limit.toString());
       if (status) params.append('status', status);
+      if (search && search.trim()) params.append('search', search.trim());
 
       const response = await apiClient.get(`/leads?${params}`);
       return response.data;

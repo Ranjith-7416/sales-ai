@@ -1,15 +1,28 @@
-import { useState } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import './App.css';
 import InputForm from './components/InputForm';
-import Dashboard from './components/Dashboard';
-import LeadsList from './components/LeadsList';
-import KnowledgeBaseViewer from './components/KnowledgeBaseViewer';
-import ScoringConfigModal from './components/ScoringConfigModal';
 import LoginPage from './components/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sliders, Database, PlusCircle, ListFilter, Sparkles, Server, LogOut } from 'lucide-react';
+
+// Lazy-loaded routes for code-splitting and rapid initial bundle delivery
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const LeadsList = lazy(() => import('./components/LeadsList'));
+const KnowledgeBaseViewer = lazy(() => import('./components/KnowledgeBaseViewer'));
+const ScoringConfigModal = lazy(() => import('./components/ScoringConfigModal'));
+
+function RouteLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="text-center space-y-3">
+        <div className="w-9 h-9 border-2 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-semibold text-slate-400 tracking-wide">Loading workspace...</p>
+      </div>
+    </div>
+  );
+}
 
 function Navigation({ onOpenScoring }: { onOpenScoring: () => void }) {
   const location = useLocation();
@@ -144,48 +157,50 @@ function App() {
 
           {/* Main Content */}
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <InputForm />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/leads"
-                element={
-                  <ProtectedRoute>
-                    <LeadsList />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/lead/:leadId"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/knowledge-base"
-                element={
-                  <ProtectedRoute>
-                    <KnowledgeBaseViewer />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
-          </main>
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <InputForm />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/leads"
+                  element={
+                    <ProtectedRoute>
+                      <LeadsList />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/lead/:leadId"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/knowledge-base"
+                  element={
+                    <ProtectedRoute>
+                      <KnowledgeBaseViewer />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
 
-          {/* Scoring Config Modal */}
-          <ScoringConfigModal
-            isOpen={scoringModalOpen}
-            onClose={() => setScoringModalOpen(false)}
-          />
+              {/* Scoring Config Modal */}
+              <ScoringConfigModal
+                isOpen={scoringModalOpen}
+                onClose={() => setScoringModalOpen(false)}
+              />
+            </Suspense>
+          </main>
 
           {/* Modern Cyber Footer */}
           <footer className="border-t border-white/[0.07] py-6 mt-12 bg-slate-950/60 backdrop-blur-md">

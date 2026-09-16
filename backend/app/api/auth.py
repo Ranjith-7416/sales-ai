@@ -200,8 +200,10 @@ async def login(payload: LoginRequest, db: Session = Depends(get_db)):
     input_email = payload.email.strip().lower()
     input_pass = payload.password.strip()
 
-    # 1. Check persistent database user
-    db_user = db.query(User).filter(func.lower(User.email) == input_email).first()
+    # 1. Check persistent database user (exact match hits the unique B-tree index)
+    db_user = db.query(User).filter(User.email == input_email).first()
+    if not db_user:
+        db_user = db.query(User).filter(func.lower(User.email) == input_email).first()
     if db_user:
         if not db_user.is_active:
             raise HTTPException(

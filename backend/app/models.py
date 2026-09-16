@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, JSON, Integer, Boolean, Enum, Text
+from sqlalchemy import Column, String, Float, DateTime, JSON, Integer, Boolean, Enum, Text, Index
 from sqlalchemy.orm import declarative_base
 from datetime import datetime
 import uuid
@@ -21,7 +21,7 @@ class Lead(Base):
     company_name = Column(String(255), nullable=True, index=True)
     inquiry_text = Column(Text, nullable=False)
     contact_name = Column(String(255), nullable=True)
-    email = Column(String(320), nullable=True)
+    email = Column(String(320), nullable=True, index=True)
     industry = Column(String(100), nullable=True, index=True)
     company_size = Column(String(50), nullable=True)
     budget = Column(String(50), nullable=True)
@@ -30,7 +30,11 @@ class Lead(Base):
 
     # Pipeline Results
     lead_status = Column(String(50), nullable=False, index=True)
-    composite_score = Column(Float, nullable=True)
+    composite_score = Column(Float, nullable=True, index=True)
+    
+    __table_args__ = (
+        Index("ix_leads_status_created_at", "lead_status", "created_at"),
+    )
     
     # JSON storage for full results
     research_result = Column(JSON, nullable=True)
@@ -95,15 +99,19 @@ class Proposal(Base):
     proposal_markdown = Column(Text, nullable=True)
     
     # Status
-    status = Column(String(50), default="draft")  # draft, approved, sent, accepted, rejected
+    status = Column(String(50), default="draft", index=True)  # draft, approved, sent, accepted, rejected
     approved_by = Column(String(255), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     sent_to = Column(String(255), nullable=True)
     sent_at = Column(DateTime, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_proposals_lead_created", "lead_id", "created_at"),
+    )
 
 
 class AgentExecution(Base):

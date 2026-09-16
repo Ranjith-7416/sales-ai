@@ -8,6 +8,7 @@ from app.config import settings
 import logging
 import time
 import re
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -273,17 +274,17 @@ class LLMService:
         raise RuntimeError("LLM invocation did not produce a response")
 
     async def invoke(self, prompt: str, use_reasoning: bool = False) -> str:
-        """Invoke LLM with prompt"""
+        """Invoke LLM with prompt asynchronously offloaded to thread pool"""
         llm = self.llm_reasoning if use_reasoning else self.llm_main
         model = self.reasoning_model if use_reasoning else self.main_model
         try:
-            return self._invoke_with_protections(llm, prompt, self.provider, model)
+            return await asyncio.to_thread(self._invoke_with_protections, llm, prompt, self.provider, model)
         except Exception as primary_error:
             # If Groq primary hits rate limit or quota, seamlessly try the lighter 20b model
             if getattr(self, "groq_fallback_llm", None) is not None:
                 try:
                     logger.info("Attempting secondary Groq model (openai/gpt-oss-20b)...")
-                    return self._invoke_with_protections(self.groq_fallback_llm, prompt, "groq", "openai/gpt-oss-20b")
+                    return await asyncio.to_thread(self._invoke_with_protections, self.groq_fallback_llm, prompt, "groq", "openai/gpt-oss-20b")
                 except Exception as secondary_error:
                     logger.warning("Secondary Groq model call failed: %s", secondary_error)
 
@@ -293,7 +294,7 @@ class LLMService:
                     if not fallback_llm:
                         continue
                     try:
-                        result = self._invoke_with_protections(fallback_llm, prompt, fallback_provider, fallback_model)
+                        result = await asyncio.to_thread(self._invoke_with_protections, fallback_llm, prompt, fallback_provider, fallback_model)
                         logger.warning("Primary provider quota exhausted; completed request with configured fallback provider")
                         return result
                     except ProviderQuotaError:

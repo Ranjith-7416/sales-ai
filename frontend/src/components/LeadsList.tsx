@@ -17,15 +17,20 @@ import {
   Sparkles,
   PlusCircle,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 const LeadsList: React.FC = () => {
   const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<LeadStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
 
   const api = useApi();
 
@@ -37,48 +42,58 @@ const LeadsList: React.FC = () => {
     try {
       await api.deleteLead(lead.id);
       setLeads(currentLeads => currentLeads.filter(item => item.id !== lead.id));
+      setTotalCount(c => Math.max(0, c - 1));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete lead');
     }
   };
 
   useEffect(() => {
-    const fetchLeads = async () => {
-      try {
-        setLoading(true);
-        const result = await api.listLeads(0, 50, filter === 'all' ? undefined : filter);
-        setLeads(Array.isArray(result?.leads) ? result.leads : []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load leads');
-      } finally {
-        setLoading(false);
-      }
+    let isCancelled = false;
+    const timer = setTimeout(() => {
+      const fetchLeads = async () => {
+        try {
+          setLoading(true);
+          const result = await api.listLeads(
+            page * pageSize,
+            pageSize,
+            filter === 'all' ? undefined : filter,
+            searchQuery
+          );
+          if (!isCancelled) {
+            setLeads(Array.isArray(result?.leads) ? result.leads : []);
+            setTotalCount(typeof result?.total === 'number' ? result.total : 0);
+          }
+        } catch (err) {
+          if (!isCancelled) {
+            setError(err instanceof Error ? err.message : 'Failed to load leads');
+          }
+        } finally {
+          if (!isCancelled) {
+            setLoading(false);
+          }
+        }
+      };
+      fetchLeads();
+    }, 200);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
     };
+  }, [filter, page, pageSize, searchQuery]);
 
-    fetchLeads();
-  }, [filter]);
-
-  // Client-side quick search filtering
-  const filteredLeads = useMemo(() => {
-    if (!searchQuery.trim()) return leads;
-    const q = searchQuery.toLowerCase();
-    return leads.filter(
-      lead =>
-        (lead.company_name && lead.company_name.toLowerCase().includes(q)) ||
-        (lead.inquiry_text && lead.inquiry_text.toLowerCase().includes(q)) ||
-        (lead.contact_name && lead.contact_name.toLowerCase().includes(q)) ||
-        (lead.industry && lead.industry.toLowerCase().includes(q))
-    );
-  }, [leads, searchQuery]);
+  // Filtered leads view (server-side handles filtering, fallback memo ensures safety)
+  const filteredLeads = leads;
 
   // Calculate metrics across loaded leads
   const stats = useMemo(() => {
-    const total = leads.length;
+    const total = totalCount || leads.length;
     const qualified = leads.filter(l => l.lead_status === LeadStatus.Qualified).length;
     const needsInfo = leads.filter(l => l.lead_status === LeadStatus.NeedsInfo).length;
     const lowPriority = leads.filter(l => l.lead_status === LeadStatus.LowPriority).length;
     return { total, qualified, needsInfo, lowPriority };
-  }, [leads]);
+  }, [leads, totalCount]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -226,13 +241,19 @@ const LeadsList: React.FC = () => {
                 type="text"
                 placeholder="Search leads, companies..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(0);
+                }}
                 className="w-full bg-slate-900/60 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-cyan-500/60 focus:ring-2 focus:ring-cyan-500/20 transition"
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setPage(0);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
                 >
                   ✕
@@ -259,7 +280,10 @@ const LeadsList: React.FC = () => {
               <button
                 key={status}
                 type="button"
-                onClick={() => setFilter(status)}
+                onClick={() => {
+                  setFilter(status);
+                  setPage(0);
+                }}
                 className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition cursor-pointer active:scale-95 border ${
                   isActive
                     ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-400/40 shadow-lg shadow-indigo-500/30'
@@ -428,6 +452,63 @@ const LeadsList: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Server-Side Pagination Bar */}
+        {totalCount > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-5 border-t border-white/[0.08] text-xs text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <span>Showing</span>
+              <strong className="text-white font-semibold">{page * pageSize + 1}</strong>
+              <span>–</span>
+              <strong className="text-white font-semibold">{Math.min((page + 1) * pageSize, totalCount)}</strong>
+              <span>of</span>
+              <strong className="text-white font-semibold">{totalCount}</strong>
+              <span>leads</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-500">Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(0);
+                  }}
+                  className="bg-slate-900/90 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={page === 0 || loading}
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-slate-900/80 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 flex items-center gap-1 transition"
+                  title="Previous page"
+                >
+                  <ChevronLeft size={14} /> Previous
+                </button>
+                <span className="px-2 text-slate-400">
+                  <strong className="text-white">{page + 1}</strong> / <strong className="text-white">{Math.max(1, Math.ceil(totalCount / pageSize))}</strong>
+                </span>
+                <button
+                  type="button"
+                  disabled={(page + 1) * pageSize >= totalCount || loading}
+                  onClick={() => setPage(p => p + 1)}
+                  className="px-2.5 py-1.5 rounded-lg border border-white/10 bg-slate-900/80 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 flex items-center gap-1 transition"
+                  title="Next page"
+                >
+                  Next <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

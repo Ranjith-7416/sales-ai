@@ -101,10 +101,13 @@ export const LoginPage: React.FC = () => {
         await login(cleanEmail, cleanPassword);
         navigate(destination, { replace: true });
       } catch (err: any) {
-        const msg =
+        let msg =
           err.response?.data?.detail ||
           err.message ||
           'Invalid email or password. Please try again.';
+        if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+          msg = 'Connection timed out. The backend service may be waking up from cold start; please try again.';
+        }
         setErrorMessage(msg);
       } finally {
         setSubmitting(false);
