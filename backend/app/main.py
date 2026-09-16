@@ -432,9 +432,12 @@ async def _process_lead_qualification(lead_id: str, lead_input: dict | LeadInput
                 "follow_up_questions": missing_information,
             }
 
-        active_missing = result.get("requirements_result", {}).get("missing_information")
-        if active_missing is None:
-            active_missing = missing_information
+        from app.services.scoring_engine import sanitize_missing_information
+        raw_missing = result.get("requirements_result", {}).get("missing_information")
+        if raw_missing is None:
+            raw_missing = missing_information
+        active_missing = sanitize_missing_information(raw_missing, lead_input)
+
         qualification_result = result.get("qualification_result") or {}
         qualification_result["lead_status"] = normalize_lead_status(
             qualification_result.get("lead_status"),
@@ -453,11 +456,7 @@ async def _process_lead_qualification(lead_id: str, lead_input: dict | LeadInput
             if lead:
                 qualification_result = result.get("qualification_result") or {}
                 lead.pipeline_result = jsonable_encoder(result)
-                lead.lead_status = normalize_lead_status(
-                    qualification_result.get("lead_status"),
-                    qualification_result.get("composite_score"),
-                    active_missing,
-                )
+                lead.lead_status = qualification_result["lead_status"]
                 lead.composite_score = qualification_result.get("composite_score", 0)
                 lead.research_result = result.get("research_result")
                 lead.requirements_result = result.get("requirements_result")

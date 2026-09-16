@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -146,6 +146,7 @@ from app.services.email_service import dispatch_proposal_email
 @router.post("/{lead_id}/send", dependencies=[Depends(require_auth), Depends(rate_limit("RATE_LIMIT_PROPOSAL_REQUESTS"))])
 async def send_proposal(
     lead_id: str,
+    request: Request,
     payload: Optional[ProposalSendRequest] = Body(None),
     recipient_email: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -196,7 +197,9 @@ async def send_proposal(
             company_name=lead.company_name or "Valued Client",
             proposal_data=lead.proposal_result or {},
             lead_id=lead_id,
+            request=request,
         )
+
 
         # Update lead proposal result with sent info
         if isinstance(lead.proposal_result, dict):
@@ -366,7 +369,7 @@ async def export_proposal(lead_id: str, format: str = "markdown", db: Session = 
 
 
 @router.get("/{lead_id}/email-view", response_class=HTMLResponse)
-async def view_proposal_email_html(lead_id: str, db: Session = Depends(get_db)):
+async def view_proposal_email_html(lead_id: str, request: Request, db: Session = Depends(get_db)):
     """View the exact HTML email generated for the client in browser"""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
@@ -384,6 +387,7 @@ async def view_proposal_email_html(lead_id: str, db: Session = Depends(get_db)):
         company_name=company,
         proposal_data=lead.proposal_result,
         lead_id=lead_id,
+        request=request,
     )
     return HTMLResponse(content=html_content)
 

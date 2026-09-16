@@ -34,10 +34,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
-const API_BASE_URL = rawApiUrl.endsWith('/api')
-  ? rawApiUrl
-  : (rawApiUrl.startsWith('http') ? `${rawApiUrl.replace(/\/$/, '')}/api` : rawApiUrl);
+import { API_BASE_URL } from '../config';
 
 // Radial SVG Gauge for Lead Qualification Score
 

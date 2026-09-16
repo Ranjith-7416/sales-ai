@@ -26,8 +26,12 @@ async def run_requirements_agent(
     inquiry_text: str,
     research_context: Optional[Dict[str, Any]] = None,
     conversation_history: Optional[list] = None,
+    budget: Optional[str] = None,
+    timeline: Optional[str] = None,
+    company_size: Optional[str] = None,
+    additional_context: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Execute requirements analysis from the inquiry plus the minimal research slice."""
+    """Execute requirements analysis from the inquiry plus research and commercial context."""
     try:
         llm_service = get_llm_service()
 
@@ -35,6 +39,13 @@ async def run_requirements_agent(
         compact_research = _compact_research_context(research_context)
         if compact_research:
             research_context_str = f"\nResearch Context:\n{json.dumps(compact_research, ensure_ascii=False)}\n"
+
+        extra_context = []
+        if budget: extra_context.append(f"Budget: {budget}")
+        if timeline: extra_context.append(f"Timeline: {timeline}")
+        if company_size: extra_context.append(f"Company Size: {company_size}")
+        if additional_context: extra_context.append(f"Additional Context: {additional_context}")
+        commercial_str = ("\nCommercial Context:\n" + "\n".join(extra_context) + "\n") if extra_context else ""
 
         history_context = ""
         if conversation_history:
@@ -46,9 +57,7 @@ async def run_requirements_agent(
 
 Customer Inquiry:
 {inquiry_text}
-{research_context_str}
-{history_context}
-
+{commercial_str}{research_context_str}{history_context}
 Extract JSON only with this structure:
 {{
   "functional_requirements": ["req1"],
@@ -75,8 +84,8 @@ Extract JSON only with this structure:
 
 CRITICAL RULES FOR "missing_information":
 1. If the inquiry is personal, academic/homework (e.g. essays, student homework), cryptocurrency, consumer spam, or has zero budget ($0 / free), do NOT list missing information (set "missing_information": []).
-2. For commercial B2B inquiries: ONLY list missing information if critical commercial discovery items are missing (e.g., "Target monthly document or interaction volume not specified", "Commercial budget range not confirmed", "Target implementation timeline not specified").
-3. If the customer already specified budget, timeline, volume, and use case, set "missing_information": [] (do NOT list minor technical nice-to-haves like SLA percent or deployment model).
+2. For commercial B2B inquiries: ONLY list missing information if critical commercial discovery items are missing.
+3. If budget, timeline, volume, or size are already provided in the inquiry or Commercial Context, do NOT list them as missing!
 Do not assume requirements not stated or clearly implied.
 """
 
@@ -86,43 +95,54 @@ Do not assume requirements not stated or clearly implied.
         try:
             result = parse_json_response(response)
         except json.JSONDecodeError:
-            result = _fallback_requirements(inquiry_text, research_context)
+            result = _fallback_requirements(inquiry_text, research_context, budget, timeline, company_size, additional_context)
 
         # Post-process missing_information to ensure consistent B2B qualification
-        text_lower = (inquiry_text or "").lower()
+        combined_text = f"{inquiry_text or ''} {additional_context or ''}".lower()
         spam_terms = ('homework', 'school', 'essay', 'crypto', 'bitcoin', 'shoes', 'weather', 'game', 'gaming', 'personal use', 'recipe')
         free_terms = ('free only', 'no budget', 'zero budget', 'cant pay', 'cannot pay', 'have no money', 'student')
-        is_spam = any(w in text_lower for w in spam_terms) or any(w in text_lower for w in free_terms)
+        is_spam = any(w in combined_text for w in spam_terms) or any(w in combined_text for w in free_terms)
 
         if is_spam:
             result["missing_information"] = []
         else:
-            has_volume = any(k in text_lower for k in ("10,000", "10000", "20,000", "25,000", "30,000", "50,000", "50000", "100k", "500", "daily", "monthly", "per month", "/month", "/mo", "volume", "scale", "records", "batches", "documents"))
-            has_budget = any(k in text_lower for k in ("$", "budget", "per month", "/month", "/mo", "allocated", "tier", "investment"))
-            has_timeline = any(k in text_lower for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy", "start"))
+            has_volume = any(k in combined_text for k in ("10,000", "10000", "20,000", "25,000", "30,000", "50,000", "50000", "100k", "500", "daily", "monthly", "per month", "/month", "/mo", "volume", "scale", "records", "batches", "documents"))
+            has_budget = bool(budget and budget.strip().lower() not in ("unspecified", "tbd", "none", "unknown", "")) or any(k in combined_text for k in ("$", "budget", "per month", "/month", "/mo", "allocated", "tier", "investment"))
+            has_timeline = bool(timeline and timeline.strip().lower() not in ("unspecified", "tbd", "none", "unknown", "")) or any(k in combined_text for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy", "start"))
+            
+            raw_missing = result.get("missing_information") or []
+            filtered_missing = []
+            for item in raw_missing:
+                item_lower = str(item).lower()
+                if has_budget and ("budget" in item_lower or "investment" in item_lower):
+                    continue
+                if has_timeline and ("timeline" in item_lower or "schedule" in item_lower or "implementation" in item_lower):
+                    continue
+                filtered_missing.append(item)
+
             if has_volume and has_budget and has_timeline:
                 result["missing_information"] = []
-            elif not result.get("missing_information"):
-                gaps = []
-                if not has_volume:
-                    gaps.append("Target monthly document or interaction volume not specified")
-                if not has_budget:
-                    gaps.append("Approved commercial budget range or expected investment not confirmed")
-                if not has_timeline:
-                    gaps.append("Target implementation timeline not specified")
-                if gaps:
-                    result["missing_information"] = gaps
+            else:
+                result["missing_information"] = filtered_missing
         
         logger.info("Requirements analysis completed")
         return result
         
     except Exception as e:
         logger.warning(f"Requirements agent LLM call failed ({e}); using intelligent contextual fallback")
-        return _fallback_requirements(inquiry_text, research_context)
+        return _fallback_requirements(inquiry_text, research_context, budget, timeline, company_size, additional_context)
 
 
-def _fallback_requirements(inquiry_text: str, research_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    text_lower = (inquiry_text or "").lower()
+def _fallback_requirements(
+    inquiry_text: str,
+    research_context: Optional[Dict[str, Any]] = None,
+    budget: Optional[str] = None,
+    timeline: Optional[str] = None,
+    company_size: Optional[str] = None,
+    additional_context: Optional[str] = None,
+) -> Dict[str, Any]:
+    combined_raw = f"{inquiry_text or ''} {additional_context or ''}"
+    text_lower = combined_raw.lower()
     fn_reqs = []
     
     # 1. Document AI & OCR Extraction
@@ -159,8 +179,8 @@ def _fallback_requirements(inquiry_text: str, research_context: Optional[Dict[st
     missing_info = []
     if not is_spam:
         has_volume = any(k in text_lower for k in ("10,000", "10000", "50,000", "50000", "100k", "500", "daily", "monthly", "per month", "/month", "/mo", "volume", "scale"))
-        has_budget = any(k in text_lower for k in ("$", "budget", "per month", "/month", "/mo", "approved budget", "tier"))
-        has_timeline = any(k in text_lower for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy"))
+        has_budget = bool(budget and budget.strip().lower() not in ("unspecified", "tbd", "none", "unknown", "")) or any(k in text_lower for k in ("$", "budget", "per month", "/month", "/mo", "approved budget", "tier"))
+        has_timeline = bool(timeline and timeline.strip().lower() not in ("unspecified", "tbd", "none", "unknown", "")) or any(k in text_lower for k in ("month", "week", "timeline", "q1", "q2", "q3", "q4", "asap", "immediate", "rollout", "deploy"))
 
         if not has_volume:
             missing_info.append("Target monthly document or customer interaction volume not specified")

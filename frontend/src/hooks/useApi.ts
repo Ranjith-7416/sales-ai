@@ -2,8 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Lead, LeadInput, ScoringConfig, ProposalExportResult, KBProduct, KBService } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-const API_TOKEN = import.meta.env.VITE_API_TOKEN;
+import { API_BASE_URL, API_TOKEN } from '../config';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -283,6 +282,20 @@ export const useApi = () => {
     }
   }, []);
 
+  const requalifyLead = useCallback(async (leadId: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.post(`/leads/${leadId}/requalify`);
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return useMemo(() => ({
     loading,
     error,
@@ -292,6 +305,7 @@ export const useApi = () => {
     updateLead,
     deleteLead,
     listLeads,
+    requalifyLead,
     getProposal,
     approveProposal,
     sendProposal,
@@ -313,6 +327,7 @@ export const useApi = () => {
     updateLead,
     deleteLead,
     listLeads,
+    requalifyLead,
     getProposal,
     approveProposal,
     sendProposal,

@@ -15,10 +15,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
-const API_BASE_URL = rawApiUrl.endsWith('/api')
-  ? rawApiUrl
-  : (rawApiUrl.startsWith('http') ? `${rawApiUrl.replace(/\/$/, '')}/api` : rawApiUrl);
+import { API_BASE_URL } from '../config';
 
 // Configured auth client with explicit 15s timeout to prevent hanging 'Authenticating...' state
 const authClient = axios.create({

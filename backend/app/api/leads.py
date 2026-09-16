@@ -252,11 +252,20 @@ async def get_lead(lead_id: str, db: Session = Depends(get_db)):
                 "score_drivers": [],
                 "follow_up_questions": result["requirements_result"]["missing_information"],
             }
-        result["qualification_result"]["lead_status"] = normalize_lead_status(
-            result["qualification_result"].get("lead_status"),
-            result["qualification_result"].get("composite_score"),
-            result["requirements_result"].get("missing_information", []),
-        )
+        missing_info = [m for m in (result["requirements_result"].get("missing_information") or []) if m and str(m).strip()]
+        if missing_info:
+            current_status = "Needs More Information"
+        elif lead.completed_at and lead.lead_status in ("Qualified", "Needs More Information", "Low Priority"):
+            current_status = lead.lead_status
+        else:
+            current_status = normalize_lead_status(
+                result["qualification_result"].get("lead_status") or lead.lead_status,
+                lead.composite_score if lead.composite_score is not None else result["qualification_result"].get("composite_score"),
+                missing_info,
+            )
+        result["qualification_result"]["lead_status"] = current_status
+        if lead.composite_score is not None:
+            result["qualification_result"]["composite_score"] = lead.composite_score
         # Map and ensure all stage results are accessible
         if not result.get("research_result") and lead.research_result:
             result["research_result"] = lead.research_result
@@ -374,8 +383,8 @@ async def get_lead(lead_id: str, db: Session = Depends(get_db)):
             "budget": lead.budget,
             "timeline": lead.timeline,
             "additional_context": lead.additional_context,
-            "lead_status": result["qualification_result"].get("lead_status", lead.lead_status),
-            "composite_score": lead.composite_score or result["qualification_result"]["composite_score"],
+            "lead_status": result["qualification_result"]["lead_status"],
+            "composite_score": lead.composite_score if lead.composite_score is not None else result["qualification_result"].get("composite_score", 0),
             "current_stage": result.get("current_stage"),
             "stages_completed": result.get("stages_completed", []),
             "created_at": lead.created_at,
@@ -440,6 +449,66 @@ async def update_lead(
         "lead_id": lead_id,
         "status": "submitted",
         "message": "Lead updated and resubmitted for qualification.",
+    }
+
+
+@router.post("/{lead_id}/requalify", dependencies=[Depends(require_auth)])
+async def requalify_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Authoritative deterministic requalification endpoint.
+    
+    Re-evaluates an existing lead using the deterministic scoring engine (v2.0.0).
+    Guarantees 100% consistent results without altering core customer input data.
+    """
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    from app.services.scoring_engine import evaluate_complete_lead
+
+    lead_dict = {
+        "lead_id": lead.id,
+        "company_name": lead.company_name,
+        "contact_name": lead.contact_name,
+        "email": lead.email,
+        "inquiry_text": lead.inquiry_text,
+        "industry": lead.industry,
+        "company_size": lead.company_size,
+        "budget": lead.budget,
+        "timeline": lead.timeline,
+        "additional_context": lead.additional_context,
+    }
+
+    qual = evaluate_complete_lead(
+        lead_dict=lead_dict,
+        research_result=lead.research_result,
+        requirements_result=lead.requirements_result,
+        solution_result=lead.solution_matching_result,
+        qualitative_llm_result=lead.qualification_result,
+    )
+
+    lead.composite_score = qual["composite_score"]
+    lead.lead_status = qual["lead_status"]
+    lead.qualification_result = qual
+
+    pipeline_res = dict(lead.pipeline_result or {})
+    pipeline_res["qualification_result"] = qual
+    pipeline_res["qualification"] = qual
+    lead.pipeline_result = pipeline_res
+
+    db.commit()
+    db.refresh(lead)
+
+    return {
+        "lead_id": lead.id,
+        "status": "requalified",
+        "composite_score": lead.composite_score,
+        "lead_status": lead.lead_status,
+        "fit_score": qual.get("fit_score"),
+        "readiness_score": qual.get("readiness_score"),
+        "opportunity_score": qual.get("opportunity_score"),
+        "risk_score": qual.get("risk_score"),
+        "score_drivers": qual.get("score_drivers"),
+        "qualification_version": qual.get("qualification_version"),
     }
 
 

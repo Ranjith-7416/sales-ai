@@ -120,22 +120,63 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "sales@salesai-platform.com")
     SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 
+    # Production Deployment & URL Resolution
+    RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL")
+    RENDER: bool = bool(os.getenv("RENDER"))
+    BACKEND_URL: Optional[str] = os.getenv("BACKEND_URL")
+
     # Frontend URL (Vercel production URL or localhost)
     FRONTEND_URL: str = os.getenv(
         "FRONTEND_URL",
         "https://sales-ai-ranjith-7416s-projects.vercel.app"
-        if os.getenv("ENVIRONMENT", "").lower() == "production"
+        if os.getenv("ENVIRONMENT", "").lower() == "production" or os.getenv("RENDER") or os.getenv("RENDER_EXTERNAL_URL")
         else "http://localhost:3000"
     )
 
-    model_config = SettingsConfigDict(
+    def is_production(self) -> bool:
+        return (
+            self.ENVIRONMENT.lower() == "production"
+            or bool(self.RENDER_EXTERNAL_URL)
+            or bool(os.getenv("RENDER"))
+        )
 
+    def get_backend_url(self, request: Optional[object] = None) -> str:
+        """Resolve authoritative backend URL without silent localhost fallbacks in production."""
+        # 1. Header inspection when request context is available
+        if request and hasattr(request, "headers"):
+            headers = getattr(request, "headers", {})
+            forwarded_proto = headers.get("x-forwarded-proto", "https")
+            forwarded_host = headers.get("x-forwarded-host") or headers.get("host")
+            if forwarded_host:
+                host_lower = forwarded_host.lower()
+                if "localhost" not in host_lower and "127.0.0.1" not in host_lower:
+                    return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+                elif "localhost" in host_lower or "127.0.0.1" in host_lower:
+                    return f"http://{forwarded_host}".rstrip("/")
+
+        # 2. Render injected external URL
+        if self.RENDER_EXTERNAL_URL and self.RENDER_EXTERNAL_URL.strip():
+            return self.RENDER_EXTERNAL_URL.strip().rstrip("/")
+
+        # 3. Explicit configured BACKEND_URL
+        if self.BACKEND_URL and self.BACKEND_URL.strip():
+            return self.BACKEND_URL.strip().rstrip("/")
+
+        # 4. Production environment check
+        if self.is_production():
+            return "https://sales-ai-etew.onrender.com"
+
+        # 5. Localhost development fallback
+        return f"http://localhost:{self.PORT or 8001}"
+
+    model_config = SettingsConfigDict(
         env_file=(str(BACKEND_ENV_FILE), ".env"),
         case_sensitive=True,
     )
 
 
 settings = Settings()
+
 
 
 def validate_production_settings() -> None:

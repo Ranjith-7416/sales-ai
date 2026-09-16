@@ -208,7 +208,11 @@ class SalesOrchestrator:
             result = await run_requirements_agent(
                 inquiry_text=state.get("inquiry_text"),
                 research_context=state.get("research_result"),
-                            conversation_history=state.get("conversation_history"),
+                conversation_history=state.get("conversation_history"),
+                budget=state.get("budget"),
+                timeline=state.get("timeline"),
+                company_size=state.get("company_size"),
+                additional_context=state.get("additional_context"),
             )
             
             state["requirements_result"] = result
@@ -231,12 +235,26 @@ class SalesOrchestrator:
         if _has_provider_quota_error(state):
             return state
 
+        lead_data = {
+            "lead_id": state.get("lead_id"),
+            "company_name": state.get("company_name"),
+            "contact_name": state.get("contact_name"),
+            "email": state.get("email"),
+            "inquiry_text": state.get("inquiry_text"),
+            "industry": state.get("industry"),
+            "company_size": state.get("company_size"),
+            "budget": state.get("budget"),
+            "timeline": state.get("timeline"),
+            "additional_context": state.get("additional_context"),
+        }
+
         async def _run_qual():
             try:
                 logger.info(f"Starting qualification stage for lead {state.get('lead_id')}")
                 result = await run_qualification_agent(
                     research_result=state.get("research_result"),
                     requirements_result=state.get("requirements_result"),
+                    lead_data=lead_data,
                 )
                 _record_agent_execution(state.get("lead_id", ""), "qualification_agent", "qualification", result)
                 logger.info(f"Qualification completed for lead {state.get('lead_id')}")
@@ -294,10 +312,24 @@ class SalesOrchestrator:
             return state
         try:
             logger.info(f"Starting qualification stage for lead {state.get('lead_id')}")
+            lead_data = {
+                "lead_id": state.get("lead_id"),
+                "company_name": state.get("company_name"),
+                "contact_name": state.get("contact_name"),
+                "email": state.get("email"),
+                "inquiry_text": state.get("inquiry_text"),
+                "industry": state.get("industry"),
+                "company_size": state.get("company_size"),
+                "budget": state.get("budget"),
+                "timeline": state.get("timeline"),
+                "additional_context": state.get("additional_context"),
+            }
             
             result = await run_qualification_agent(
                 research_result=state.get("research_result"),
                 requirements_result=state.get("requirements_result"),
+                lead_data=lead_data,
+                solution_result=state.get("solution_matching_result"),
             )
             
             state["qualification_result"] = result

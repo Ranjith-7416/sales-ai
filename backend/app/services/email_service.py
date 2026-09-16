@@ -17,16 +17,18 @@ def build_proposal_email_content(
     proposal_data: Dict[str, Any],
     lead_id: str = "",
     base_url: Optional[str] = None,
+    request: Optional[Any] = None,
 ) -> tuple[str, str]:
     """Build plain-text and HTML versions of the proposal email."""
     if not base_url:
-        base_url = "https://sales-ai-etew.onrender.com" if settings.ENVIRONMENT.lower() == "production" else "http://localhost:8001"
+        base_url = settings.get_backend_url(request)
 
     title = proposal_data.get("title", f"Enterprise Solution Proposal for {company_name}")
     summary = proposal_data.get("executive_summary", "Enterprise solution tailored to your operational specifications.")
     solution = proposal_data.get("proposed_solution", "Comprehensive AI enterprise capability architecture.")
     timeline = proposal_data.get("total_implementation_timeline", "2-4 weeks")
-    accept_url = f"{base_url.rstrip('/')}/api/proposals/{lead_id}/accept" if lead_id else f"/api/proposals/accept"
+    accept_url = f"{base_url.rstrip('/')}/api/proposals/{lead_id}/accept" if lead_id else f"{base_url.rstrip('/')}/api/proposals/accept"
+
 
     
     # Requirements
@@ -191,6 +193,8 @@ def dispatch_proposal_email(
     company_name: str,
     proposal_data: Dict[str, Any],
     lead_id: str = "",
+    base_url: Optional[str] = None,
+    request: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Dispatch proposal email to client.
@@ -205,6 +209,8 @@ def dispatch_proposal_email(
         company_name=company_name,
         proposal_data=proposal_data,
         lead_id=lead_id,
+        base_url=base_url,
+        request=request,
     )
 
     # Check if SMTP configuration is active

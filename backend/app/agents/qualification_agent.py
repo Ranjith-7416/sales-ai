@@ -43,37 +43,64 @@ def _bounded_score(value: Any) -> float:
         return 0.0
 
 
+from app.services.scoring_engine import (
+    evaluate_complete_lead,
+    calculate_composite_lead_score,
+    determine_qualification_status,
+    QUALIFICATION_VERSION,
+    SCORING_CONFIG_VERSION,
+)
+
+
 def calculate_deterministic_qualification(result: Dict[str, Any], missing_information: list[str] | None = None) -> Dict[str, Any]:
-    """Derive the final score and status from bounded model-extracted components."""
+    """Derive the final score and status deterministically from configured weights and thresholds."""
     result["fit_score"] = _bounded_score(result.get("fit_score"))
     result["readiness_score"] = _bounded_score(result.get("readiness_score"))
     result["opportunity_score"] = _bounded_score(result.get("opportunity_score"))
     result["risk_score"] = _bounded_score(result.get("risk_score"))
-    result["composite_score"] = round(
-        (result["fit_score"] * settings.FIT_SCORE_WEIGHT)
-        + (result["readiness_score"] * settings.READINESS_SCORE_WEIGHT)
-        + (result["opportunity_score"] * settings.OPPORTUNITY_SCORE_WEIGHT)
-        + ((100.0 - result["risk_score"]) * settings.RISK_SCORE_WEIGHT),
-        2,
+    result["composite_score"] = calculate_composite_lead_score(
+        result["fit_score"],
+        result["readiness_score"],
+        result["opportunity_score"],
+        result["risk_score"],
     )
-    result["lead_status"] = normalize_lead_status(
-        None,
+    result["lead_status"] = determine_qualification_status(
         result["composite_score"],
         missing_information,
     )
+    result["qualification_version"] = QUALIFICATION_VERSION
+    result["scoring_config_version"] = SCORING_CONFIG_VERSION
     return result
 
 
 async def run_qualification_agent(
     research_result: Optional[Dict[str, Any]] = None,
     requirements_result: Optional[Dict[str, Any]] = None,
+    lead_data: Optional[Dict[str, Any]] = None,
+    solution_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Execute qualification agent from the minimal scoring evidence slice; composite score remains deterministic."""
+    """Execute qualification agent. Qualitative facts extracted via LLM; all scores and status computed deterministically."""
+    lead_dict = dict(lead_data) if lead_data else {}
+    if research_result:
+        lead_dict.setdefault("company_name", research_result.get("company_name"))
+        lead_dict.setdefault("industry", research_result.get("industry_vertical"))
+        lead_dict.setdefault("company_size", research_result.get("company_size"))
+
     try:
         llm_service = get_llm_service()
 
         research_str = json.dumps(_compact_research(research_result), ensure_ascii=False) if research_result else "No research data"
         requirements_str = json.dumps(_compact_requirements(requirements_result), ensure_ascii=False) if requirements_result else "No requirements data"
+        
+        commercial_str = ""
+        if lead_dict:
+            comm_items = []
+            if lead_dict.get("budget"): comm_items.append(f"Budget: {lead_dict['budget']}")
+            if lead_dict.get("timeline"): comm_items.append(f"Timeline: {lead_dict['timeline']}")
+            if lead_dict.get("company_size"): comm_items.append(f"Company Size: {lead_dict['company_size']}")
+            if lead_dict.get("additional_context"): comm_items.append(f"Additional Context: {lead_dict['additional_context']}")
+            if comm_items:
+                commercial_str = "\nCOMMERCIAL CONTEXT:\n" + "\n".join(comm_items) + "\n"
 
         prompt = f"""You are an enterprise B2B sales lead qualification expert.
 Our Product Offerings:
@@ -85,62 +112,49 @@ Evaluate the following lead context and requirements carefully:
 
 RESEARCH CONTEXT:
 {research_str}
-
+{commercial_str}
 REQUIREMENTS:
 {requirements_str}
 
-Scoring Rubric (0 to 100):
-- fit_score:
-  * 80-100: Direct match to document processing, conversational AI, or compliance capabilities.
-  * 40-65: General business software or automation inquiry with partial capability match.
-  * 0-25: Out-of-scope, personal, homework, crypto, gaming, or consumer retail request.
-- readiness_score:
-  * 80-100: Commercial enterprise budget ($5k-$50k+) and clear timeline (1-3 months) documented.
-  * 35-60: Commercial interest but budget or timeline are unconfirmed / to be decided.
-  * 0-20: Expressly zero-budget, free tier only, student, or hobby project.
-- opportunity_score:
-  * 80-100: High enterprise volume (10k+ docs/month, 50k+ chats/month, 250+ employees).
-  * 45-65: Mid-market commercial volume (1k-5k docs, mid-size team).
-  * 0-30: Minimal or individual usage (a few docs, single user, personal).
-- risk_score:
-  * 10-25: Standard formats, clear technical specs, documented compliance.
-  * 40-60: Ambiguous requirements or unspecified data formats.
-  * 75-100: Unrealistic expectations, zero budget, out-of-scope, or competitor probe.
-
-Return JSON only with this shape:
+Extract qualitative evidence and score drivers in JSON format:
 {{
-  "fit_score": 0,
-  "fit_evidence": "brief reason",
-  "readiness_score": 0,
-  "readiness_evidence": "brief reason",
-  "opportunity_score": 0,
-  "opportunity_evidence": "brief reason",
-  "risk_score": 0,
-  "risk_evidence": "brief reason",
-  "score_drivers": [["factor", "impact"]],
-  "follow_up_questions": ["q1"]
+  "fit_evidence": "concise explanation of product capability alignment",
+  "readiness_evidence": "concise explanation of budget and timeline readiness",
+  "opportunity_evidence": "concise explanation of scale and opportunity size",
+  "risk_evidence": "concise explanation of delivery or compliance risk",
+  "score_drivers": [["Factor name", "Impact assessment"]],
+  "follow_up_questions": ["question 1"]
 }}
 
-Do not compute the composite score; that score remains deterministic from the configured formula.
+Only extract qualitative assessments. All numeric scores and final status are calculated deterministically by the scoring engine.
 """
 
         response = await llm_service.invoke(prompt, use_reasoning=False)
         
         try:
-            result = parse_json_response(response)
+            qualitative_result = parse_json_response(response)
         except json.JSONDecodeError:
-            result = _fallback_qualification(research_result, requirements_result)
-        
-        result = calculate_deterministic_qualification(
-            result,
-            (requirements_result or {}).get("missing_information", []),
+            qualitative_result = None
+
+        final_result = evaluate_complete_lead(
+            lead_dict=lead_dict,
+            research_result=research_result,
+            requirements_result=requirements_result,
+            solution_result=solution_result,
+            qualitative_llm_result=qualitative_result,
         )
-        logger.info(f"Qualification completed - Score: {result.get('composite_score')} - Status: {result.get('lead_status')}")
-        return result
+        logger.info(f"Qualification completed - Score: {final_result.get('composite_score')} - Status: {final_result.get('lead_status')}")
+        return final_result
         
     except Exception as e:
-        logger.warning(f"Qualification agent LLM call failed ({e}); using intelligent contextual fallback")
-        return _fallback_qualification(research_result, requirements_result)
+        logger.warning(f"Qualification agent LLM call failed ({e}); using deterministic fallback evaluation")
+        return evaluate_complete_lead(
+            lead_dict=lead_dict,
+            research_result=research_result,
+            requirements_result=requirements_result,
+            solution_result=solution_result,
+            qualitative_llm_result=None,
+        )
 
 
 def _fallback_qualification(research_result: Optional[Dict[str, Any]], requirements_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
