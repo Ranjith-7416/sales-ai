@@ -226,9 +226,11 @@ def send_via_resend(
     text_body: str,
     from_email: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Transmit email via Resend HTTP REST API over HTTPS port 443 (Allowed on Render Free Tier)."""
-    # Resend onboarding sandbox requires sender to be onboarding@resend.dev unless custom domain is verified
-    sender = from_email if (from_email and "@" in from_email and not from_email.endswith("@gmail.com")) else "Sales AI <onboarding@resend.dev>"
+    # Resend free tier onboarding requires sending from onboarding@resend.dev unless a custom domain is verified on resend.com/domains
+    # Always default to onboarding@resend.dev so delivery succeeds out of the box without domain verification
+    sender = "Sales AI <onboarding@resend.dev>"
+    if from_email and "@" in from_email and "salesai-platform.com" not in from_email and not from_email.endswith("@gmail.com"):
+        sender = from_email
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.post(
@@ -412,7 +414,7 @@ def dispatch_proposal_email(
             subject=subject,
             html_body=html_body,
             text_body=text_body,
-            from_email=settings.SMTP_FROM_EMAIL or settings.SMTP_USER,
+            from_email="Sales AI <onboarding@resend.dev>",
         )
 
     # 2. Priority B: Brevo HTTP REST API (Over HTTPS port 443 - 100% permitted on Render Free Tier)
