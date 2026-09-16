@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Backgroun
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.openapi.docs import get_redoc_html
 from contextlib import asynccontextmanager
 import logging
 import uuid
@@ -50,7 +51,7 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="Sales AI - Lead Qualification & Proposal Generation System",
     lifespan=lifespan,
-    redoc_js_url="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js",
+    redoc_url=None,
 )
 
 
@@ -80,6 +81,19 @@ async def health_check():
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
     }
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html(request: Request) -> HTMLResponse:
+    """Serve ReDoc interactive API documentation with a verified, reliable CDN asset."""
+    root_path = request.scope.get("root_path", "").rstrip("/")
+    openapi_url = root_path + (app.openapi_url or "/openapi.json")
+    return get_redoc_html(
+        openapi_url=openapi_url,
+        title=f"{app.title} - ReDoc",
+        redoc_js_url="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js",
+        with_google_fonts=True,
+    )
 
 
 @app.get("/api/config/status")
