@@ -26,7 +26,10 @@ class ProposalApprovalRequest(BaseModel):
 
 
 class ProposalSendRequest(BaseModel):
-    recipient_email: Optional[str] = Field(default=None, description="Recipient email address")
+    recipient_email: Optional[str] = Field(default=None, description="Client Recipient Email address")
+    subject: Optional[str] = Field(default=None, description="Email subject line")
+    message: Optional[str] = Field(default=None, description="Email message or introductory text")
+
 
 
 class ProposalGenerateRequest(BaseModel):
@@ -241,6 +244,8 @@ async def send_proposal(
             proposal_data=lead.proposal_result or {},
             lead_id=lead_id,
             request=request,
+            custom_subject=payload.subject if payload else None,
+            custom_message=payload.message if payload else None,
         )
 
         proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
@@ -296,12 +301,14 @@ async def send_proposal(
 
             return {
                 "success": True,
+                "provider": "gmail_smtp",
                 "status": "sent",
                 "lead_id": lead_id,
                 "recipient": target_email,
-                "message": email_result.get("message", f"Email accepted for delivery to {target_email}"),
+                "subject": email_result.get("subject") or (payload.subject if payload else None) or f"Strategic Solution Proposal — {lead.company_name}",
+                "message": f"Email sent successfully to {target_email}",
                 "message_id": email_result.get("message_id"),
-                "delivery_mode": email_result.get("delivery_mode", "smtp_live"),
+                "delivery_mode": "smtp_live",
                 "sent_at": now.isoformat(),
                 "proposal": lead.proposal_result,
             }
@@ -340,14 +347,16 @@ async def send_proposal(
                 status_code=400,
                 content={
                     "success": False,
+                    "provider": "gmail_smtp",
                     "status": "failed",
                     "lead_id": lead_id,
                     "recipient": target_email,
-                    "message": email_result.get("message", "Email could not be sent."),
-                    "error": email_result.get("error", "SMTP delivery failure"),
-                    "delivery_mode": email_result.get("delivery_mode"),
+                    "message": "Email failed to send.",
+                    "error": email_result.get("message") or email_result.get("error") or "Email delivery failed",
+                    "delivery_mode": email_result.get("delivery_mode", "smtp_error"),
                 },
             )
+
     
     except HTTPException:
         raise

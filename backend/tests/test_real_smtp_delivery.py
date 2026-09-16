@@ -95,7 +95,7 @@ def test_unconfigured_smtp_returns_failure():
         assert result["success"] is False
         assert result["status"] == "failed"
         assert result["delivery_mode"] == "unconfigured"
-        assert "SMTP server is not configured" in result["message"]
+        assert "not configured" in result["message"]
     finally:
         settings.SMTP_USER = original_user
         settings.SMTP_PASSWORD = original_pass
@@ -259,7 +259,8 @@ def test_send_proposal_api_unconfigured_smtp(client, db_session):
         data = res.json()
         assert data["success"] is False
         assert data["status"] == "failed"
-        assert "SMTP server is not configured" in data["message"]
+        assert data["message"] == "Email failed to send."
+        assert "unconfigured" in data.get("error", "").lower() or "not configured" in data.get("error", "").lower()
 
         # Verify proposal status in DB was NOT marked sent
         prop = db_session.query(Proposal).filter(Proposal.lead_id == lead_id).first()
@@ -339,24 +340,70 @@ def test_send_proposal_api_success_mocked_smtp(client, db_session):
         settings.SMTP_PASSWORD = original_pass
 
 
-def test_http_api_resend_delivery(monkeypatch):
-    """Verify proposal dispatch via Resend REST API when EMAIL_PROVIDER=resend."""
+def test_send_proposal_api_with_custom_subject_and_message(client, db_session):
+    """Verify POST /api/proposals/{lead_id}/send accepts and uses custom subject and message."""
+    lead_id = str(uuid.uuid4())
+    lead = Lead(
+        id=lead_id,
+        company_name="Custom Message Corp",
+        inquiry_text="Need AI automation",
+        lead_status="Qualified",
+        proposal_result={"title": "AI Proposal", "proposed_solution": "Architecture"},
+    )
+    db_session.add(lead)
+    db_session.commit()
+
+    original_host = settings.SMTP_HOST
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
+    try:
+        settings.SMTP_HOST = "smtp.gmail.com"
+        settings.SMTP_PORT = 587
+        settings.SMTP_USER = "sender@gmail.com"
+        settings.SMTP_PASSWORD = "testapppassword123"
+        settings.SMTP_USE_TLS = True
+
+        mock_server = MagicMock()
+        mock_server.send_message.return_value = {}
+
+        with patch("smtplib.SMTP", return_value=mock_server):
+            res = client.post(
+                f"/api/proposals/{lead_id}/send",
+                json={
+                    "recipient_email": "client@customcorp.com",
+                    "subject": "AI Automation Strategy & Architecture Proposal — Custom Message Corp",
+                    "message": "Hello team, attached is the comprehensive architecture and implementation plan.",
+                },
+                headers=get_auth_headers(),
+            )
+            assert res.status_code == 200
+            data = res.json()
+            assert data["success"] is True
+            assert data["provider"] == "gmail_smtp"
+            assert data["recipient"] == "client@customcorp.com"
+            assert "AI Automation Strategy" in data["subject"]
+
+            # Verify the email message delivered had the custom subject
+            sent_msg = mock_server.send_message.call_args[0][0]
+            assert "AI Automation Strategy & Architecture Proposal" in sent_msg["Subject"]
+            assert sent_msg["To"] == "client@customcorp.com"
+    finally:
+        settings.SMTP_HOST = original_host
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
+
+
+def test_resend_removed_and_smtp_required(monkeypatch):
+    """Verify that Resend is removed and dispatch_proposal_email only uses Gmail SMTP."""
     original_provider = settings.EMAIL_PROVIDER
     original_resend = settings.RESEND_API_KEY
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
     try:
         settings.EMAIL_PROVIDER = "resend"
         settings.RESEND_API_KEY = "re_test_dummy_key_123"
-
-        class DummyResponse:
-            status_code = 200
-            headers = {"content-type": "application/json"}
-            def json(self):
-                return {"id": "resend_msg_mock_999"}
-
-        def dummy_post(*args, **kwargs):
-            return DummyResponse()
-
-        monkeypatch.setattr(httpx.Client, "post", dummy_post)
+        settings.SMTP_USER = None
+        settings.SMTP_PASSWORD = None
 
         res = dispatch_proposal_email(
             recipient_email="client@example.com",
@@ -365,14 +412,15 @@ def test_http_api_resend_delivery(monkeypatch):
             lead_id="lead-resend-test",
         )
 
-        assert res["success"] is True
-        assert res["status"] == "sent"
-        assert res["delivery_mode"] == "resend_api"
-        assert res["message_id"] == "resend_msg_mock_999"
-        assert "Resend API" in res["message"]
+        assert res["success"] is False
+        assert res["status"] == "failed"
+        assert res.get("provider") == "gmail_smtp"
+        assert "not configured" in res["message"]
     finally:
         settings.EMAIL_PROVIDER = original_provider
         settings.RESEND_API_KEY = original_resend
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
 
 
 def test_zero_resend_calls_when_email_provider_is_smtp(monkeypatch):

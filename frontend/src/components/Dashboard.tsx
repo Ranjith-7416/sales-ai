@@ -110,6 +110,8 @@ const Dashboard: React.FC = () => {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
   const [smtpStatus, setSmtpStatus] = useState<{
     configured: boolean;
     active_provider?: string;
@@ -459,8 +461,14 @@ const Dashboard: React.FC = () => {
   };
 
   const handleOpenSendModal = async () => {
+    const company = lead?.company_name || 'Client';
     const defaultEmail = lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
     setRecipientEmail(defaultEmail);
+    setEmailSubject(lead?.proposal_result?.title ? `${lead.proposal_result.title} — ${company}` : `Strategic Solution Proposal — ${company}`);
+    const summaryText = lead?.proposal_result?.executive_summary || lead?.proposal_result?.summary || 'Tailored technical architecture and implementation roadmap.';
+    setEmailMessage(
+      `Hello ${company} Team,\n\nPlease find attached our strategic proposal for your consideration.\n\nSummary:\n${summaryText}\n\nWe look forward to partnering with you.`
+    );
     setSendModalNotification(null);
     setShowSendModal(true);
     try {
@@ -499,7 +507,7 @@ const Dashboard: React.FC = () => {
     // Check if SMTP is configured before attempting send
     if (smtpStatus && !smtpStatus.configured) {
       setShowSmtpDrawer(true);
-      const msg = 'Live SMTP is not configured. Please enter your sender Gmail address and 16-character App Password below, click "Save & Enable SMTP Delivery", and then transmit.';
+      const msg = 'Email failed to send. Gmail SMTP is not configured. Please enter your Gmail address and 16-character Google App Password below and click "Save & Enable Gmail SMTP (Port 587)".';
       setSendModalNotification({
         type: 'error',
         message: msg,
@@ -509,9 +517,14 @@ const Dashboard: React.FC = () => {
 
     setSendingEmail(true);
     try {
-      const res = await api.sendProposal(leadId, target);
+      const res = await api.sendProposal(
+        leadId,
+        target,
+        emailSubject.trim() || undefined,
+        emailMessage.trim() || undefined
+      );
       if (res?.success) {
-        const successMsg = `Email accepted for delivery to ${target}! (Message-ID: ${res.message_id || 'dispatched'})`;
+        const successMsg = `Email sent successfully to ${target}`;
         setSendModalNotification({
           type: 'success',
           message: successMsg,
@@ -545,7 +558,7 @@ const Dashboard: React.FC = () => {
           setSendModalNotification(null);
         }, 2200);
       } else {
-        const errMsg = res?.message || 'Email could not be sent. Please check recipient address or email configuration.';
+        const errMsg = res?.message || 'Email failed to send.';
         setSendModalNotification({
           type: 'error',
           message: errMsg,
@@ -560,8 +573,8 @@ const Dashboard: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Send failed:', err);
-      const serverMsg = err.response?.data?.message || err.response?.data?.error || err.message;
-      const finalMsg = serverMsg || 'Email delivery failed. Please check SMTP settings or recipient email.';
+      const serverErr = err.response?.data?.error || err.response?.data?.message || err.message;
+      const finalMsg = `Email failed to send. ${serverErr ? `Reason: ${serverErr}` : ''}`.trim();
       setSendModalNotification({
         type: 'error',
         message: finalMsg,
@@ -1761,7 +1774,7 @@ const Dashboard: React.FC = () => {
             <div className="space-y-3.5">
               <div>
                 <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
-                  <span>Client Recipient Email (Destination)</span>
+                  <span>Client Recipient Email</span>
                   <span className="text-[10px] text-slate-400">Target inbox to receive proposal</span>
                 </label>
                 <input
@@ -1770,6 +1783,34 @@ const Dashboard: React.FC = () => {
                   onChange={(e) => setRecipientEmail(e.target.value)}
                   placeholder="client@company.com"
                   className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
+                  <span>Subject</span>
+                  <span className="text-[10px] text-slate-400">Email subject line</span>
+                </label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Strategic Solution Proposal — Company"
+                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
+                  <span>Message / Proposal</span>
+                  <span className="text-[10px] text-slate-400">Accompanying note & proposal content</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={emailMessage}
+                  onChange={(e) => setEmailMessage(e.target.value)}
+                  placeholder="Enter message or introductory note for client..."
+                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1 resize-y"
                 />
               </div>
 
@@ -1970,7 +2011,7 @@ const Dashboard: React.FC = () => {
                 className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
               >
                 {sendingEmail ? <Loader size={14} className="animate-spin text-white" /> : <Mail size={14} />}
-                {sendingEmail ? 'Sending...' : 'Confirm & Send'}
+                {sendingEmail ? 'Sending email...' : 'Confirm & Send'}
               </button>
             </div>
           </div>

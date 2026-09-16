@@ -171,14 +171,18 @@ export const useApi = () => {
     }
   }, []);
 
-  const sendProposal = useCallback(async (leadId: string, email: string) => {
+  const sendProposal = useCallback(async (leadId: string, email: string, subject?: string, message?: string) => {
     setLoading(true);
     setError(null);
 
     try {
+      const payload: Record<string, any> = { recipient_email: email };
+      if (subject) payload.subject = subject;
+      if (message) payload.message = message;
+
       const response = await apiClient.post(
         `/proposals/${leadId}/send`,
-        { recipient_email: email },
+        payload,
         { params: { recipient_email: email } }
       );
       return response.data;
