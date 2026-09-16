@@ -113,18 +113,18 @@ const Dashboard: React.FC = () => {
   const [smtpStatus, setSmtpStatus] = useState<{
     configured: boolean;
     active_provider?: string;
-    has_http_api?: boolean;
+    provider_display?: string;
     smtp_user?: string;
     smtp_host?: string;
+    smtp_port?: number;
+    has_password?: boolean;
     is_render?: boolean;
-    render_free_smtp_blocked?: boolean;
   } | null>(null);
   const [showSmtpDrawer, setShowSmtpDrawer] = useState(false);
-  const [smtpTab, setSmtpTab] = useState<'http' | 'smtp'>('http');
-  const [resendApiKey, setResendApiKey] = useState('');
   const [smtpUser, setSmtpUser] = useState('');
   const [smtpPassword, setSmtpPassword] = useState('');
   const [savingSmtp, setSavingSmtp] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
   const [sendModalNotification, setSendModalNotification] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -570,10 +570,7 @@ const Dashboard: React.FC = () => {
         type: 'error',
         message: finalMsg,
       });
-      if (finalMsg.includes('Render') || finalMsg.includes('101') || finalMsg.includes('unreachable')) {
-        setSmtpTab('http');
-        setShowSmtpDrawer(true);
-      } else if (finalMsg.includes('SMTP') || finalMsg.includes('configured') || finalMsg.includes('Missing')) {
+      if (finalMsg.includes('SMTP') || finalMsg.includes('configured') || finalMsg.includes('Missing') || finalMsg.includes('authentication') || finalMsg.includes('credentials') || finalMsg.includes('101')) {
         setShowSmtpDrawer(true);
       }
     } finally {
@@ -581,43 +578,23 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleSaveResendConfig = async () => {
-    if (!resendApiKey.trim()) {
-      setSendModalNotification({
-        type: 'error',
-        message: 'Please enter a valid Resend API Key (starts with re_...).',
-      });
-      return;
-    }
+  const handleTestSmtp = async () => {
     try {
-      setSavingSmtp(true);
+      setTestingSmtp(true);
       setSendModalNotification(null);
-      await api.updateSmtpConfig({
-        resend_api_key: resendApiKey.trim(),
-      });
-      setSmtpStatus((prev) => ({
-        configured: true,
-        active_provider: 'resend_api',
-        has_http_api: true,
-        ...prev,
-      }));
-      setShowSmtpDrawer(false);
+      const res = await api.testSmtpConnection();
       setSendModalNotification({
         type: 'success',
-        message: '✅ Resend API enabled over port 443! Ready for live delivery on Render. Click "Confirm & Send".',
-      });
-      setProposalNotification({
-        type: 'success',
-        message: 'Resend API enabled over port 443. Ready for live email delivery.',
+        message: res.message || '✅ Gmail SMTP connected and authenticated successfully!',
       });
     } catch (err: any) {
-      const errMsg = getErrorMessage(err, 'Failed to save Resend configuration');
+      const errMsg = getErrorMessage(err, 'SMTP connection test failed');
       setSendModalNotification({
         type: 'error',
-        message: `Failed to save Resend API key: ${errMsg}`,
+        message: `❌ ${errMsg}`,
       });
     } finally {
-      setSavingSmtp(false);
+      setTestingSmtp(false);
     }
   };
 
@@ -625,39 +602,41 @@ const Dashboard: React.FC = () => {
     if (!smtpUser.trim() || !smtpPassword.trim()) {
       setSendModalNotification({
         type: 'error',
-        message: 'Please enter both your Gmail address and 16-character App Password.',
+        message: 'Please enter both your Gmail address and 16-character Google App Password.',
       });
       return;
     }
     try {
       setSavingSmtp(true);
       setSendModalNotification(null);
-      await api.updateSmtpConfig({
+      const res = await api.updateSmtpConfig({
         smtp_host: 'smtp.gmail.com',
         smtp_port: 587,
-        smtp_user: smtpUser.trim(),
+        smtp_username: smtpUser.trim(),
         smtp_password: smtpPassword.trim(),
         smtp_from_email: smtpUser.trim(),
         smtp_use_tls: true,
       });
-      setSmtpStatus((prev) => ({
-        configured: true,
-        active_provider: 'smtp',
-        smtp_user: smtpUser.trim(),
-        smtp_host: 'smtp.gmail.com',
-        ...prev,
-      }));
+      setSmtpStatus({
+        configured: res.configured,
+        active_provider: res.active_provider,
+        provider_display: res.provider_display,
+        smtp_user: res.smtp_user || smtpUser.trim(),
+        smtp_host: res.smtp_host || 'smtp.gmail.com',
+        smtp_port: res.smtp_port || 587,
+        has_password: res.has_password,
+      });
       setShowSmtpDrawer(false);
       setSendModalNotification({
         type: 'success',
-        message: '✅ SMTP credentials saved! Note: On Render Free Tier, port 587 may be blocked by the host. If delivery fails with Errno 101, use the free Resend API tab.',
+        message: '✅ Gmail SMTP configuration saved successfully! Ready for live delivery.',
       });
       setProposalNotification({
         type: 'success',
-        message: 'SMTP credentials updated successfully.',
+        message: 'Gmail SMTP credentials updated successfully.',
       });
     } catch (err: any) {
-      const errMsg = getErrorMessage(err, 'Failed to save SMTP configuration');
+      const errMsg = getErrorMessage(err, 'Failed to save Gmail SMTP configuration');
       setSendModalNotification({
         type: 'error',
         message: `Failed to save SMTP configuration: ${errMsg}`,
@@ -666,6 +645,7 @@ const Dashboard: React.FC = () => {
       setSavingSmtp(false);
     }
   };
+
 
   const numericScore = qualification?.composite_score ?? 0;
 
@@ -1794,253 +1774,151 @@ const Dashboard: React.FC = () => {
               </div>
 
               {/* Email Delivery Configuration Alert & Setup Drawer */}
-              {!smtpStatus?.configured ? (
+              {smtpStatus?.configured && smtpStatus?.active_provider === 'smtp' ? (
+                <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/30 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-medium">
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                      <span>
+                        Active Provider: <strong className="text-white font-semibold">Gmail SMTP ({smtpStatus.smtp_host || 'smtp.gmail.com'}:{smtpStatus.smtp_port || 587})</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleTestSmtp}
+                        disabled={testingSmtp}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
+                      >
+                        {testingSmtp ? 'Testing...' : 'Test Connection'}
+                      </button>
+                      <span className="text-emerald-700">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
+                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
+                      >
+                        {showSmtpDrawer ? 'Close' : 'Update Credentials'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-emerald-300/80 flex items-center justify-between">
+                    <span>
+                      Authenticated Mailbox: <strong className="text-white font-mono">{smtpStatus.smtp_user}</strong>
+                    </span>
+                    <span className="text-emerald-400 font-mono text-[9px] bg-emerald-900/50 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                      STARTTLS Active
+                    </span>
+                  </div>
+
+                  {showSmtpDrawer && (
+                    <div className="pt-2.5 border-t border-emerald-500/20 space-y-2 mt-2">
+                      <div>
+                        <label className="text-[10px] text-slate-300 font-medium">Gmail Address</label>
+                        <input
+                          type="email"
+                          value={smtpUser}
+                          onChange={(e) => setSmtpUser(e.target.value)}
+                          placeholder="your.account@gmail.com"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-slate-300 font-medium">New 16-Character Gmail App Password</label>
+                          <a
+                            href="https://myaccount.google.com/apppasswords"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-amber-300 hover:text-white underline inline-flex items-center gap-1 font-semibold"
+                          >
+                            Generate Code <ExternalLink size={10} />
+                          </a>
+                        </div>
+                        <input
+                          type="password"
+                          value={smtpPassword}
+                          onChange={(e) => setSmtpPassword(e.target.value)}
+                          placeholder="Enter new 16-character App Password"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 font-mono"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveSmtp}
+                        disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
+                        className="w-full px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      >
+                        {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                        {savingSmtp ? 'Saving...' : 'Update Gmail SMTP'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
                 <div className="p-3.5 bg-amber-950/40 rounded-xl border border-amber-500/30 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
                       <AlertCircle size={14} className="text-amber-400 shrink-0" />
-                      Email Delivery Provider Setup Required
+                      Gmail SMTP Setup Required
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
                       className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
                     >
-                      {showSmtpDrawer ? 'Collapse' : 'Configure Provider'}
+                      {showSmtpDrawer ? 'Collapse' : 'Configure Gmail SMTP'}
                     </button>
                   </div>
                   <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                    To transmit real emails to <span className="font-semibold text-white">{recipientEmail || 'client'}</span>, configure an email provider. On Render Free Tier, use <strong className="text-white">Resend API (Port 443)</strong> because Render blocks port 587.
+                    To transmit real emails to <span className="font-semibold text-white">{recipientEmail || 'client'}</span>, configure Gmail SMTP (<strong className="text-white">smtp.gmail.com:587</strong>) with your Gmail address and 16-character Google App Password.
                   </p>
 
                   {showSmtpDrawer && (
                     <div className="pt-2.5 border-t border-amber-500/20 space-y-2.5 mt-2">
-                      {/* Provider selection tabs */}
-                      <div className="flex rounded-lg bg-slate-900/90 p-1 border border-white/[0.08]">
-                        <button
-                          type="button"
-                          onClick={() => setSmtpTab('http')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-semibold rounded-md transition ${
-                            smtpTab === 'http'
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          🚀 Resend API (Port 443 • Free Tier)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSmtpTab('smtp')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-semibold rounded-md transition ${
-                            smtpTab === 'smtp'
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          ✉️ Gmail SMTP (Port 587)
-                        </button>
+                      <div className="p-2 bg-slate-900/80 rounded-lg border border-white/[0.08] text-[10px] text-slate-300 leading-relaxed">
+                        <strong>Gmail App Password:</strong> Generate a 16-character code in Google Account &gt; Security &gt; 2-Step Verification &gt; App Passwords.
                       </div>
-
-                      {smtpTab === 'http' ? (
-                        <div className="space-y-2">
-                          <div className="p-2 bg-indigo-950/40 rounded-lg border border-indigo-500/20 text-[10px] text-indigo-200/90 leading-relaxed">
-                            <strong>Recommended for Render:</strong> Connects over standard HTTPS (port 443), completely bypassing Render's port 587 block.
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <label className="text-[10px] text-slate-300 font-medium">Resend API Key</label>
-                              <a
-                                href="https://resend.com/api-keys"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-indigo-400 hover:text-white underline inline-flex items-center gap-1 font-semibold"
-                              >
-                                Get Free Key (100 free/day) <ExternalLink size={10} />
-                              </a>
-                            </div>
-                            <input
-                              type="password"
-                              value={resendApiKey}
-                              onChange={(e) => setResendApiKey(e.target.value)}
-                              placeholder="re_123456789abcdef..."
-                              className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 font-mono focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSaveResendConfig}
-                            disabled={savingSmtp || !resendApiKey.trim()}
-                            className="w-full mt-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-indigo-600/30"
-                          >
-                            {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                            {savingSmtp ? 'Saving...' : 'Save & Enable Resend API (Port 443)'}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="p-2 bg-amber-950/40 rounded-lg border border-amber-500/20 text-[10px] text-amber-200/90 leading-relaxed">
-                            <strong>Direct SMTP Notice:</strong> Render Free Tier blocks outbound port 587 ([Errno 101]). Works when running locally or on a Render paid plan.
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-slate-300 font-medium">Gmail Address (Sender Mailbox)</label>
-                            <input
-                              type="email"
-                              value={smtpUser}
-                              onChange={(e) => setSmtpUser(e.target.value)}
-                              placeholder="your.account@gmail.com"
-                              className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <label className="text-[10px] text-slate-300 font-medium">16-Character Gmail App Password</label>
-                              <a
-                                href="https://myaccount.google.com/apppasswords"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-amber-300 hover:text-white underline inline-flex items-center gap-1 font-semibold"
-                              >
-                                Generate at Google <ExternalLink size={10} />
-                              </a>
-                            </div>
-                            <input
-                              type="password"
-                              value={smtpPassword}
-                              onChange={(e) => setSmtpPassword(e.target.value)}
-                              placeholder="abcd efgh ijkl mnop"
-                              className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSaveSmtp}
-                            disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
-                            className="w-full mt-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                          >
-                            {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                            {savingSmtp ? 'Saving...' : 'Save Gmail SMTP (Port 587)'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/30 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-medium">
-                      <CheckCircle2 size={13} className="text-emerald-400" />
-                      <span>
-                        {smtpStatus?.has_http_api ? (
-                          <>
-                            Active Provider: <strong className="text-white">Resend API (HTTPS Port 443)</strong>
-                          </>
-                        ) : (
-                          <>
-                            Live Sender Mailbox: <strong className="text-white">{smtpStatus?.smtp_user}</strong> (Port 587)
-                          </>
-                        )}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
-                      className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
-                    >
-                      {showSmtpDrawer ? 'Close' : 'Change Provider'}
-                    </button>
-                  </div>
-
-                  {showSmtpDrawer && (
-                    <div className="pt-2 border-t border-emerald-500/20 space-y-2.5">
-                      <div className="flex rounded-lg bg-slate-900/90 p-1 border border-white/[0.08]">
-                        <button
-                          type="button"
-                          onClick={() => setSmtpTab('http')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-semibold rounded-md transition ${
-                            smtpTab === 'http'
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          🚀 Resend API (Port 443)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSmtpTab('smtp')}
-                          className={`flex-1 py-1 px-2 text-[10px] font-semibold rounded-md transition ${
-                            smtpTab === 'smtp'
-                              ? 'bg-indigo-600 text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          ✉️ Gmail SMTP (Port 587)
-                        </button>
+                      <div>
+                        <label className="text-[10px] text-slate-300 font-medium">Gmail Address (Sender Mailbox)</label>
+                        <input
+                          type="email"
+                          value={smtpUser}
+                          onChange={(e) => setSmtpUser(e.target.value)}
+                          placeholder="your.account@gmail.com"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                        />
                       </div>
-
-                      {smtpTab === 'http' ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[10px] text-slate-300 font-medium">New Resend API Key</label>
-                            <a
-                              href="https://resend.com/api-keys"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-indigo-400 hover:text-white underline inline-flex items-center gap-1 font-semibold"
-                            >
-                              Get Free Key <ExternalLink size={10} />
-                            </a>
-                          </div>
-                          <input
-                            type="password"
-                            value={resendApiKey}
-                            onChange={(e) => setResendApiKey(e.target.value)}
-                            placeholder="re_..."
-                            className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveResendConfig}
-                            disabled={savingSmtp || !resendApiKey.trim()}
-                            className="w-full px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-slate-300 font-medium">16-Character Gmail App Password</label>
+                          <a
+                            href="https://myaccount.google.com/apppasswords"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-amber-300 hover:text-white underline inline-flex items-center gap-1 font-semibold"
                           >
-                            {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                            {savingSmtp ? 'Saving...' : 'Switch to Resend API (Port 443)'}
-                          </button>
+                            Generate at Google <ExternalLink size={10} />
+                          </a>
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-[10px] text-slate-300 font-medium">Sender Gmail Address</label>
-                            <input
-                              type="email"
-                              value={smtpUser}
-                              onChange={(e) => setSmtpUser(e.target.value)}
-                              placeholder="your.account@gmail.com"
-                              className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-slate-300 font-medium">New App Password</label>
-                            <input
-                              type="password"
-                              value={smtpPassword}
-                              onChange={(e) => setSmtpPassword(e.target.value)}
-                              placeholder="Enter new 16-character code"
-                              className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 font-mono"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSaveSmtp}
-                            disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
-                            className="w-full px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-                          >
-                            {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                            {savingSmtp ? 'Updating...' : 'Update SMTP Credentials'}
-                          </button>
-                        </div>
-                      )}
+                        <input
+                          type="password"
+                          value={smtpPassword}
+                          onChange={(e) => setSmtpPassword(e.target.value)}
+                          placeholder="abcd efgh ijkl mnop"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveSmtp}
+                        disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
+                        className="w-full mt-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-indigo-600/30"
+                      >
+                        {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                        {savingSmtp ? 'Saving...' : 'Save & Enable Gmail SMTP (Port 587)'}
+                      </button>
                     </div>
                   )}
                 </div>

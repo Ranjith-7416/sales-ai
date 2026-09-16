@@ -283,6 +283,21 @@ export const useApi = () => {
     }
   }, []);
 
+  const testSmtpConnection = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.post('/config/smtp/test');
+      return response.data;
+    } catch (err) {
+      handleError(err as AxiosError);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+
   const acceptProposal = useCallback(async (leadId: string) => {
     setLoading(true);
     setError(null);
@@ -333,6 +348,7 @@ export const useApi = () => {
     searchKnowledgeBase,
     getSmtpConfig,
     updateSmtpConfig,
+    testSmtpConnection,
     acceptProposal,
   }), [
     loading,
@@ -356,6 +372,7 @@ export const useApi = () => {
     searchKnowledgeBase,
     getSmtpConfig,
     updateSmtpConfig,
+    testSmtpConnection,
     acceptProposal,
   ]);
 };

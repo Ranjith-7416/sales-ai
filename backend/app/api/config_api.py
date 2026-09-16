@@ -89,98 +89,123 @@ async def update_scoring_config(config: ScoringConfigSchema):
     }
 
 
+from fastapi.responses import JSONResponse
+import smtplib
+
+
 class SmtpConfigSchema(BaseModel):
+    email_provider: Optional[str] = Field(default="smtp", description="Active email provider (smtp)")
     smtp_host: Optional[str] = Field(default="smtp.gmail.com", description="SMTP hostname")
     smtp_port: Optional[int] = Field(default=587, description="SMTP port")
     smtp_user: Optional[str] = Field(default=None, description="SMTP sender username or Gmail address")
+    smtp_username: Optional[str] = Field(default=None, description="Alias for smtp_user")
     smtp_password: Optional[str] = Field(default=None, description="SMTP password or 16-character Gmail App Password")
     smtp_from_email: Optional[str] = Field(default=None, description="Sender from header email")
     smtp_use_tls: Optional[bool] = Field(default=True, description="Enable STARTTLS encryption")
-    resend_api_key: Optional[str] = Field(default=None, description="Resend HTTP API key (port 443)")
-    brevo_api_key: Optional[str] = Field(default=None, description="Brevo HTTP API key (port 443)")
-    sendgrid_api_key: Optional[str] = Field(default=None, description="SendGrid HTTP API key (port 443)")
 
 
 @router.get("/smtp")
 async def get_smtp_config():
-    """Retrieve current email delivery configuration status (with credentials masked)"""
-    has_smtp = bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
-    has_resend = bool(settings.RESEND_API_KEY)
-    has_brevo = bool(settings.BREVO_API_KEY)
-    has_sendgrid = bool(settings.SENDGRID_API_KEY)
-    is_configured = has_smtp or has_resend or has_brevo or has_sendgrid
-
-    active_provider = "unconfigured"
-    if has_resend:
-        active_provider = "resend_api"
-    elif has_brevo:
-        active_provider = "brevo_api"
-    elif has_sendgrid:
-        active_provider = "sendgrid_api"
-    elif has_smtp:
-        active_provider = "smtp"
+    """Retrieve current email delivery configuration status (with credentials masked)."""
+    is_configured = settings.is_smtp_configured()
+    active_provider = "smtp" if is_configured else "unconfigured"
+    provider_display = f"Gmail SMTP ({settings.SMTP_HOST}:{settings.SMTP_PORT})" if is_configured else None
 
     return {
         "configured": is_configured,
         "active_provider": active_provider,
-        "has_http_api": bool(has_resend or has_brevo or has_sendgrid),
+        "provider_display": provider_display,
+        "email_provider": settings.EMAIL_PROVIDER,
         "smtp_host": settings.SMTP_HOST or "smtp.gmail.com",
         "smtp_port": settings.SMTP_PORT,
-        "smtp_user": settings.SMTP_USER or "",
-        "smtp_from_email": settings.SMTP_FROM_EMAIL or "sales@salesai-platform.com",
+        "smtp_user": settings.SMTP_USER if (settings.SMTP_USER and not settings.is_placeholder(settings.SMTP_USER)) else "",
+        "smtp_from_email": settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "",
         "smtp_use_tls": settings.SMTP_USE_TLS,
-        "has_password": bool(settings.SMTP_PASSWORD),
-        "has_resend_api_key": has_resend,
-        "has_brevo_api_key": has_brevo,
-        "has_sendgrid_api_key": has_sendgrid,
+        "has_password": bool(settings.SMTP_PASSWORD and not settings.is_placeholder(settings.SMTP_PASSWORD)),
         "is_render": bool(settings.RENDER),
-        "render_free_smtp_blocked": bool(settings.RENDER and not (has_resend or has_brevo or has_sendgrid)),
-        "note": "Render Free Tier blocks outbound ports 25, 465, and 587. For Render, use an HTTP Email API (Resend / Brevo) over HTTPS port 443.",
     }
 
 
 @router.post("/smtp")
 async def update_smtp_config(config: SmtpConfigSchema):
-    """Update email delivery settings dynamically for live client email delivery"""
-    if config.resend_api_key and config.resend_api_key.strip():
-        settings.RESEND_API_KEY = config.resend_api_key.strip()
-    if config.brevo_api_key and config.brevo_api_key.strip():
-        settings.BREVO_API_KEY = config.brevo_api_key.strip()
-    if config.sendgrid_api_key and config.sendgrid_api_key.strip():
-        settings.SENDGRID_API_KEY = config.sendgrid_api_key.strip()
-
-    if config.smtp_host:
+    """Update Gmail SMTP delivery settings dynamically for live client email delivery."""
+    settings.EMAIL_PROVIDER = "smtp"
+    if config.smtp_host and config.smtp_host.strip():
         settings.SMTP_HOST = config.smtp_host.strip()
     if config.smtp_port is not None:
         settings.SMTP_PORT = config.smtp_port
-    if config.smtp_user:
-        settings.SMTP_USER = config.smtp_user.strip()
-    if config.smtp_password:
+
+    username = config.smtp_username or config.smtp_user
+    if username and username.strip():
+        settings.SMTP_USER = username.strip()
+    if config.smtp_password and config.smtp_password.strip():
         settings.SMTP_PASSWORD = config.smtp_password.strip()
     if config.smtp_from_email and config.smtp_from_email.strip():
         settings.SMTP_FROM_EMAIL = config.smtp_from_email.strip()
-    elif config.smtp_user and "@" in config.smtp_user:
-        settings.SMTP_FROM_EMAIL = config.smtp_user.strip()
+    elif settings.SMTP_USER and "@" in settings.SMTP_USER:
+        settings.SMTP_FROM_EMAIL = settings.SMTP_USER.strip()
     if config.smtp_use_tls is not None:
         settings.SMTP_USE_TLS = config.smtp_use_tls
 
-    active_provider = (
-        "resend_api" if settings.RESEND_API_KEY
-        else "brevo_api" if settings.BREVO_API_KEY
-        else "sendgrid_api" if settings.SENDGRID_API_KEY
-        else "smtp" if (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
-        else "unconfigured"
-    )
+    is_configured = settings.is_smtp_configured()
+    active_provider = "smtp" if is_configured else "unconfigured"
+    provider_display = f"Gmail SMTP ({settings.SMTP_HOST}:{settings.SMTP_PORT})" if is_configured else None
 
-    logger.info("Email delivery configuration updated dynamically: provider=%s", active_provider)
+    logger.info("Gmail SMTP configuration updated dynamically: configured=%s, provider=%s", is_configured, active_provider)
     return {
-        "message": "Email delivery configuration updated successfully",
-        "configured": True,
+        "message": "Gmail SMTP configuration updated successfully",
+        "configured": is_configured,
         "active_provider": active_provider,
-        "has_http_api": bool(settings.RESEND_API_KEY or settings.BREVO_API_KEY or settings.SENDGRID_API_KEY),
+        "provider_display": provider_display,
         "smtp_host": settings.SMTP_HOST,
         "smtp_port": settings.SMTP_PORT,
-        "smtp_user": settings.SMTP_USER,
-        "smtp_from_email": settings.SMTP_FROM_EMAIL,
+        "smtp_user": settings.SMTP_USER or "",
+        "smtp_from_email": settings.SMTP_FROM_EMAIL or settings.SMTP_USER or "",
+        "has_password": bool(settings.SMTP_PASSWORD and not settings.is_placeholder(settings.SMTP_PASSWORD)),
     }
+
+
+@router.post("/smtp/test")
+async def test_smtp_connection():
+    """Verify live Gmail SMTP connection, STARTTLS, and authentication without sending an email."""
+    if not settings.is_smtp_configured():
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": "Gmail SMTP is not configured. Please provide your Gmail address and 16-character App Password.",
+            },
+        )
+    try:
+        if settings.SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=8)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=8)
+            server.ehlo()
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+                server.ehlo()
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.quit()
+        return {
+            "success": True,
+            "message": f"Successfully connected and authenticated to Gmail SMTP ({settings.SMTP_HOST}:{settings.SMTP_PORT}) as {settings.SMTP_USER}!",
+        }
+    except smtplib.SMTPAuthenticationError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": "Gmail SMTP authentication failed. Please verify your Gmail address and 16-character Google App Password (2-Step Verification must be turned ON in Google Account settings).",
+            },
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": f"SMTP connection failed: {str(e)}",
+            },
+        )
+
 

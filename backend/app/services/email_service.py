@@ -405,222 +405,245 @@ def dispatch_proposal_email(
         request=request,
     )
 
-    # 2. Priority A: Resend HTTP REST API (Over HTTPS port 443 - 100% permitted on Render Free Tier)
-    if settings.RESEND_API_KEY:
-        logger.info(f"Initiating HTTP API delivery to {recipient_email} via Resend API")
-        return send_via_resend(
-            api_key=settings.RESEND_API_KEY,
-            recipient_email=recipient_email,
-            subject=subject,
-            html_body=html_body,
-            text_body=text_body,
-            from_email="Sales AI <onboarding@resend.dev>",
-        )
+    # 2. Select Delivery Provider (Gmail SMTP is Primary)
+    provider = (getattr(settings, "EMAIL_PROVIDER", "smtp") or "smtp").strip().lower()
 
-    # 2. Priority B: Brevo HTTP REST API (Over HTTPS port 443 - 100% permitted on Render Free Tier)
-    if settings.BREVO_API_KEY:
-        logger.info(f"Initiating HTTP API delivery to {recipient_email} via Brevo API")
-        return send_via_brevo(
-            api_key=settings.BREVO_API_KEY,
-            recipient_email=recipient_email,
-            subject=subject,
-            html_body=html_body,
-            text_body=text_body,
-            from_email=settings.SMTP_FROM_EMAIL or settings.SMTP_USER,
-        )
+    if provider == "smtp":
+        # Check that Gmail SMTP is actually configured with valid credentials
+        if not settings.is_smtp_configured():
+            missing = []
+            if not settings.SMTP_HOST or settings.is_placeholder(settings.SMTP_HOST):
+                missing.append("SMTP_HOST")
+            if not settings.SMTP_USER or settings.is_placeholder(settings.SMTP_USER):
+                missing.append("SMTP_USERNAME")
+            if not settings.SMTP_PASSWORD or settings.is_placeholder(settings.SMTP_PASSWORD):
+                missing.append("SMTP_PASSWORD")
 
-    # 3. Priority C: Standard Direct SMTP Delivery (ports 587/465)
-    if not (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD):
-        missing = []
-        if not settings.SMTP_HOST:
-            missing.append("SMTP_HOST")
-        if not settings.SMTP_USER:
-            missing.append("SMTP_USER")
-        if not settings.SMTP_PASSWORD:
-            missing.append("SMTP_PASSWORD")
+            err_msg = (
+                f"Email delivery failed: SMTP server is not configured. "
+                f"Missing: {', '.join(missing) if missing else 'Valid credentials'}. "
+                f"Please configure your Gmail address and 16-character Google App Password."
+            )
+            logger.warning(f"Proposal dispatch aborted for {recipient_email}: {err_msg}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "unconfigured",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": err_msg,
+                "error": f"SMTP unconfigured: {', '.join(missing)}",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
 
-        err_msg = (
-            f"Email delivery failed: SMTP server is not configured. "
-            f"Missing: {', '.join(missing)} or HTTP Email API Key (Resend / Brevo). "
-            f"Please configure an email delivery provider."
-        )
-        logger.warning(f"Proposal dispatch aborted for {recipient_email}: {err_msg}")
+        # Real live Gmail SMTP delivery flow:
+        # SMTP connection -> EHLO -> STARTTLS -> EHLO -> Authentication -> send_message()
+        try:
+            logger.info(
+                "Initiating real Gmail SMTP delivery to %s via %s:%d",
+                recipient_email,
+                settings.SMTP_HOST,
+                settings.SMTP_PORT,
+            )
+
+            # Gmail requires sender to match authenticated Gmail mailbox
+            from_user = settings.SMTP_USER.strip()
+            from_address = f"Sales AI <{from_user}>"
+
+            domain = settings.SMTP_HOST
+            if "." in domain:
+                domain_parts = domain.split(".")
+                domain = ".".join(domain_parts[-2:])
+            message_id = make_msgid(domain=domain)
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = from_address
+            msg["To"] = recipient_email
+            msg["Reply-To"] = from_user
+            msg["Date"] = formatdate(localtime=True)
+            msg["Message-ID"] = message_id
+
+            part1 = MIMEText(text_body, "plain", "utf-8")
+            part2 = MIMEText(html_body, "html", "utf-8")
+            msg.attach(part1)
+            msg.attach(part2)
+
+            if settings.SMTP_PORT == 465:
+                server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+            else:
+                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+                server.ehlo()
+                if settings.SMTP_USE_TLS:
+                    server.starttls()
+                    server.ehlo()
+
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            refused_recipients = server.send_message(msg)
+            server.quit()
+
+            if refused_recipients:
+                logger.error(f"SMTP rejected recipient {recipient_email}: {refused_recipients}")
+                return {
+                    "success": False,
+                    "status": "failed",
+                    "delivery_mode": "smtp_live",
+                    "recipient": recipient_email,
+                    "subject": subject,
+                    "message": f"Email was rejected by SMTP server for recipient: {recipient_email}",
+                    "error": f"Recipient refused: {refused_recipients}",
+                    "message_id": message_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+            logger.info(f"Successfully transmitted proposal email to {recipient_email} via Gmail SMTP [Message-ID: {message_id}]")
+            return {
+                "success": True,
+                "status": "sent",
+                "delivery_mode": "smtp_live",
+                "message_id": message_id,
+                "recipient": recipient_email,
+                "sender": from_address,
+                "subject": subject,
+                "smtp_host": settings.SMTP_HOST,
+                "message": f"Email accepted for delivery to {recipient_email} via Gmail SMTP",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP authentication failed for {settings.SMTP_USER}: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": "Email delivery failed: Gmail SMTP authentication error. Please verify your Gmail address and 16-character Google App Password (ensure 2-Step Verification is enabled on your Google Account).",
+                "error": "SMTP authentication failed. Verify credentials.",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except smtplib.SMTPConnectError as e:
+            logger.error(f"Failed to connect to SMTP server {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"Email delivery failed: Could not connect to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}.",
+                "error": f"SMTP connection error: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except (socket.timeout, TimeoutError) as e:
+            logger.error(f"SMTP connection timed out to {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"Email delivery failed: Connection to mail server at {settings.SMTP_HOST} timed out.",
+                "error": "SMTP connection timed out.",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except smtplib.SMTPRecipientsRefused as e:
+            logger.error(f"SMTP recipient {recipient_email} was refused: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"Email delivery failed: Recipient address '{recipient_email}' was rejected by mail server.",
+                "error": f"Recipient refused: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except smtplib.SMTPException as e:
+            logger.error(f"SMTP delivery exception: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"Email delivery failed: SMTP server reported error: {str(e)}",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except OSError as e:
+            err_str = str(e)
+            logger.error(f"Network OS error during SMTP connection: {e}")
+            if getattr(e, "errno", None) == 101 or "Network is unreachable" in err_str:
+                msg = (
+                    f"Email delivery failed: Outbound SMTP ports ({settings.SMTP_PORT}) are blocked by host network "
+                    f"[Errno 101: Network is unreachable]. "
+                    f"Render Free Tier prohibits traffic on outbound ports 25, 465, and 587."
+                )
+            elif getattr(e, "errno", None) == 111 or "Connection refused" in err_str:
+                msg = f"Email delivery failed: Connection refused to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}."
+            else:
+                msg = f"Email delivery failed due to network socket error: {err_str}"
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "smtp_network_error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": msg,
+                "error": err_str,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error during proposal email dispatch: {e}")
+            return {
+                "success": False,
+                "status": "failed",
+                "delivery_mode": "error",
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"Email delivery failed: {str(e)}",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+    # Optional Resend provider branch ONLY if EMAIL_PROVIDER is explicitly configured as 'resend'
+    elif provider == "resend":
+        if settings.RESEND_API_KEY:
+            logger.info(f"Initiating HTTP API delivery to {recipient_email} via Resend API")
+            return send_via_resend(
+                api_key=settings.RESEND_API_KEY,
+                recipient_email=recipient_email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+                from_email="Sales AI <onboarding@resend.dev>",
+            )
         return {
             "success": False,
             "status": "failed",
             "delivery_mode": "unconfigured",
             "recipient": recipient_email,
             "subject": subject,
-            "message": err_msg,
-            "error": f"SMTP unconfigured: {', '.join(missing)}",
+            "message": "Email delivery failed: RESEND_API_KEY is not configured.",
+            "error": "Missing RESEND_API_KEY",
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    # 4. Real live SMTP delivery
-    try:
-        logger.info(f"Initiating real SMTP delivery to {recipient_email} via {settings.SMTP_HOST}:{settings.SMTP_PORT}")
-
-        from_address = settings.SMTP_FROM_EMAIL if settings.SMTP_FROM_EMAIL and "@" in settings.SMTP_FROM_EMAIL else settings.SMTP_USER
-        
-        domain = settings.SMTP_HOST
-        if "." in domain:
-            domain_parts = domain.split(".")
-            domain = ".".join(domain_parts[-2:])
-        message_id = make_msgid(domain=domain)
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = from_address
-        msg["To"] = recipient_email
-        msg["Reply-To"] = from_address
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = message_id
-
-        part1 = MIMEText(text_body, "plain", "utf-8")
-        part2 = MIMEText(html_body, "html", "utf-8")
-        msg.attach(part1)
-        msg.attach(part2)
-
-        if settings.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6)
-        else:
-            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6)
-            server.ehlo()
-            if settings.SMTP_USE_TLS:
-                server.starttls()
-                server.ehlo()
-
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        refused_recipients = server.send_message(msg)
-        server.quit()
-
-        if refused_recipients:
-            logger.error(f"SMTP rejected recipient {recipient_email}: {refused_recipients}")
-            return {
-                "success": False,
-                "status": "failed",
-                "delivery_mode": "smtp_live",
-                "recipient": recipient_email,
-                "subject": subject,
-                "message": f"Email was rejected by SMTP server for recipient: {recipient_email}",
-                "error": f"Recipient refused: {refused_recipients}",
-                "message_id": message_id,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-        logger.info(f"Successfully transmitted proposal email to {recipient_email} [Message-ID: {message_id}]")
-        return {
-            "success": True,
-            "status": "sent",
-            "delivery_mode": "smtp_live",
-            "message_id": message_id,
-            "recipient": recipient_email,
-            "sender": from_address,
-            "subject": subject,
-            "smtp_host": settings.SMTP_HOST,
-            "message": f"Email accepted for delivery to {recipient_email}",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP authentication failed for {settings.SMTP_USER}: {e}")
+    else:
         return {
             "success": False,
             "status": "failed",
-            "delivery_mode": "smtp_error",
+            "delivery_mode": "unconfigured",
             "recipient": recipient_email,
             "subject": subject,
-            "message": "Email delivery failed: SMTP authentication error. Please verify your SMTP username and Gmail App Password (16 characters, 2-step verification must be enabled on Google).",
-            "error": "SMTP authentication failed. Verify credentials.",
+            "message": f"Unsupported email provider: {provider}. Supported providers: smtp",
+            "error": f"Unknown provider: {provider}",
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    except smtplib.SMTPConnectError as e:
-        logger.error(f"Failed to connect to SMTP server {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "smtp_error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": f"Email delivery failed: Could not connect to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}.",
-            "error": f"SMTP connection error: {str(e)}",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except (socket.timeout, TimeoutError) as e:
-        logger.error(f"SMTP connection timed out to {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "smtp_error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": f"Email delivery failed: Connection to mail server at {settings.SMTP_HOST} timed out.",
-            "error": "SMTP connection timed out.",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except smtplib.SMTPRecipientsRefused as e:
-        logger.error(f"SMTP recipient {recipient_email} was refused: {e}")
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "smtp_error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": f"Email delivery failed: Recipient address '{recipient_email}' was rejected by mail server.",
-            "error": f"Recipient refused: {str(e)}",
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP delivery exception: {e}")
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "smtp_error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": f"Email delivery failed: SMTP server reported error: {str(e)}",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except OSError as e:
-        err_str = str(e)
-        logger.error(f"Network OS error during SMTP connection: {e}")
-        if getattr(e, "errno", None) == 101 or "Network is unreachable" in err_str:
-            msg = (
-                f"Email delivery failed: Outbound SMTP ports ({settings.SMTP_PORT}) are blocked by host network "
-                f"[Errno 101: Network is unreachable]. "
-                f"Render Free Tier prohibits traffic on ports 25, 465, and 587. "
-                f"To send live emails on Render Free Tier, please provide a free Resend API key (over HTTPS port 443) or upgrade to a Render paid instance."
-            )
-        elif getattr(e, "errno", None) == 111 or "Connection refused" in err_str:
-            msg = f"Email delivery failed: Connection refused to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}."
-        else:
-            msg = f"Email delivery failed due to network socket error: {err_str}"
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "smtp_network_error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": msg,
-            "error": err_str,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
-
-    except Exception as e:
-        logger.error(f"Unexpected error during proposal email dispatch: {e}")
-        return {
-            "success": False,
-            "status": "failed",
-            "delivery_mode": "error",
-            "recipient": recipient_email,
-            "subject": subject,
-            "message": f"Email delivery failed: {str(e)}",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat(),
-        }

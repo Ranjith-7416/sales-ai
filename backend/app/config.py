@@ -112,16 +112,59 @@ class Settings(BaseSettings):
     ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Sales AI Director")
     ADMIN_ROLE: str = os.getenv("ADMIN_ROLE", "admin")
 
-    # Email Delivery Configuration (SMTP & HTTP API Providers)
-    SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
+    # Email Delivery Configuration (Gmail SMTP is Primary)
+    EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
+    SMTP_USER: Optional[str] = os.getenv("SMTP_USERNAME") or os.getenv("SMTP_USER")
     SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "sales@salesai-platform.com")
-    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    SMTP_FROM_EMAIL: Optional[str] = os.getenv("SMTP_FROM_EMAIL")
+    SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").strip().lower() in ("true", "1", "yes")
     RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY")
     BREVO_API_KEY: Optional[str] = os.getenv("BREVO_API_KEY")
     SENDGRID_API_KEY: Optional[str] = os.getenv("SENDGRID_API_KEY")
+
+    @staticmethod
+    def is_placeholder(val: Optional[str]) -> bool:
+        if not val or not isinstance(val, str):
+            return True
+        v = val.strip().lower()
+        if not v:
+            return True
+        placeholders = [
+            "<my gmail address>",
+            "<my gmail app password>",
+            "<gmail address>",
+            "<app password>",
+            "your.account@gmail.com",
+            "username@gmail.com",
+            "placeholder",
+            "none",
+            "null",
+            "undefined",
+            "enter_here",
+            "test_key",
+        ]
+        return any(p in v for p in placeholders)
+
+    def is_smtp_configured(self) -> bool:
+        """
+        Confirms that Gmail SMTP is actually configured with valid, non-placeholder credentials.
+        Returns False if environment variables contain empty strings or placeholder text.
+        """
+        if (self.EMAIL_PROVIDER or "").lower() != "smtp":
+            return False
+        if self.is_placeholder(self.SMTP_HOST) or self.is_placeholder(self.SMTP_USER) or self.is_placeholder(self.SMTP_PASSWORD):
+            return False
+        if not self.SMTP_HOST or not self.SMTP_USER or not self.SMTP_PASSWORD:
+            return False
+        user = self.SMTP_USER.strip()
+        if "@" not in user or "." not in user.split("@")[-1]:
+            return False
+        if len(self.SMTP_PASSWORD.strip()) < 6:
+            return False
+        return True
+
 
     # Production Deployment & URL Resolution
     RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL")

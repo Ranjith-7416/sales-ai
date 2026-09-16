@@ -340,9 +340,11 @@ def test_send_proposal_api_success_mocked_smtp(client, db_session):
 
 
 def test_http_api_resend_delivery(monkeypatch):
-    """Verify proposal dispatch via Resend REST API (port 443)."""
+    """Verify proposal dispatch via Resend REST API when EMAIL_PROVIDER=resend."""
+    original_provider = settings.EMAIL_PROVIDER
     original_resend = settings.RESEND_API_KEY
     try:
+        settings.EMAIL_PROVIDER = "resend"
         settings.RESEND_API_KEY = "re_test_dummy_key_123"
 
         class DummyResponse:
@@ -369,7 +371,80 @@ def test_http_api_resend_delivery(monkeypatch):
         assert res["message_id"] == "resend_msg_mock_999"
         assert "Resend API" in res["message"]
     finally:
+        settings.EMAIL_PROVIDER = original_provider
         settings.RESEND_API_KEY = original_resend
+
+
+def test_zero_resend_calls_when_email_provider_is_smtp(monkeypatch):
+    """Verify that when EMAIL_PROVIDER=smtp, ZERO Resend API calls occur even if RESEND_API_KEY is present."""
+    original_provider = settings.EMAIL_PROVIDER
+    original_resend = settings.RESEND_API_KEY
+    original_host = settings.SMTP_HOST
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
+    try:
+        settings.EMAIL_PROVIDER = "smtp"
+        settings.RESEND_API_KEY = "re_do_not_call_this"
+        settings.SMTP_HOST = "smtp.gmail.com"
+        settings.SMTP_PORT = 587
+        settings.SMTP_USER = "sender@gmail.com"
+        settings.SMTP_PASSWORD = "testapppassword123"
+        settings.SMTP_USE_TLS = True
+
+        resend_called = False
+
+        def mock_resend_post(*args, **kwargs):
+            nonlocal resend_called
+            resend_called = True
+            raise RuntimeError("Resend should not be called when EMAIL_PROVIDER=smtp")
+
+        monkeypatch.setattr(httpx.Client, "post", mock_resend_post)
+
+        mock_server = MagicMock()
+        mock_server.send_message.return_value = {}
+
+        with patch("smtplib.SMTP", return_value=mock_server):
+            res = dispatch_proposal_email(
+                recipient_email="client@example.com",
+                company_name="Acme Inc",
+                proposal_data={"title": "Cloud Migration Proposal"},
+                lead_id="lead-smtp-priority-test",
+            )
+
+            assert res["success"] is True
+            assert res["status"] == "sent"
+            assert res["delivery_mode"] == "smtp_live"
+            assert resend_called is False, "CRITICAL: Resend was contacted when EMAIL_PROVIDER=smtp!"
+            mock_server.starttls.assert_called_once()
+            mock_server.login.assert_called_once_with("sender@gmail.com", "testapppassword123")
+            mock_server.send_message.assert_called_once()
+    finally:
+        settings.EMAIL_PROVIDER = original_provider
+        settings.RESEND_API_KEY = original_resend
+        settings.SMTP_HOST = original_host
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
+
+
+def test_placeholder_smtp_credentials_marked_unconfigured():
+    """Verify placeholder values like <my Gmail address> are rejected by is_smtp_configured."""
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
+    try:
+        settings.SMTP_USER = "<my Gmail address>"
+        settings.SMTP_PASSWORD = "<my Gmail App Password>"
+        assert settings.is_smtp_configured() is False
+
+        settings.SMTP_USER = "your.account@gmail.com"
+        settings.SMTP_PASSWORD = "placeholder"
+        assert settings.is_smtp_configured() is False
+
+        settings.SMTP_USER = "valid.user@gmail.com"
+        settings.SMTP_PASSWORD = "valid16characterapppassword"
+        assert settings.is_smtp_configured() is True
+    finally:
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
 
 
 def test_oserror_errno_101_render_blocked_message(monkeypatch):
@@ -400,10 +475,11 @@ def test_oserror_errno_101_render_blocked_message(monkeypatch):
         assert res["status"] == "failed"
         assert res["delivery_mode"] == "smtp_network_error"
         assert "Render Free Tier" in res["message"]
-        assert "Resend" in res["message"]
+        assert "prohibits traffic" in res["message"] or "blocked" in res["message"]
         assert "101" in res["error"] or "Network is unreachable" in res["error"]
     finally:
         settings.SMTP_HOST = original_host
         settings.SMTP_USER = original_user
         settings.SMTP_PASSWORD = original_pass
+
 
