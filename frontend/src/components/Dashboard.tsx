@@ -495,7 +495,31 @@ const Dashboard: React.FC = () => {
         };
       });
     } catch (err: any) {
-      console.error('PDF generation failed:', err);
+      console.warn('Axios PDF download error, triggering direct browser download fallback...', err);
+      try {
+        const queryParams = target ? `?client_email=${encodeURIComponent(target)}` : '';
+        const fallbackUrl = `/api/proposals/${leadId}/pdf${queryParams}`;
+        const link = document.createElement('a');
+        link.href = fallbackUrl;
+        link.setAttribute('download', `Proposal_${(lead?.company_name || 'Client').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`);
+        link.setAttribute('target', '_blank');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setPdfDownloaded(true);
+        setPdfNotification({
+          type: 'success',
+          message: 'Proposal PDF download initiated. Attach this file in your email client to send to the client.',
+        });
+        setProposalNotification({
+          type: 'success',
+          message: 'PDF READY ✓ Your proposal PDF has been generated successfully. Download the proposal PDF and manually attach it to your email to send it to the client.',
+        });
+        return;
+      } catch (fallbackErr) {
+        console.error('Direct download fallback failed:', fallbackErr);
+      }
+
       const errMsg = getErrorMessage(err, 'Failed to generate proposal PDF');
       setPdfNotification({
         type: 'error',

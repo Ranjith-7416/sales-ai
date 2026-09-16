@@ -17,7 +17,20 @@ export const useApi = () => {
   const [error, setError] = useState<string | null>(null);
 
   const handleError = (err: AxiosError<any>) => {
-    const message = err.response?.data?.detail || err.message || 'An error occurred';
+    let message = err.response?.data?.detail || err.message || 'An error occurred';
+    // If response is a blob containing JSON error details
+    if (err.response?.data instanceof Blob) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(reader.result as string);
+          if (parsed.detail) {
+            setError(parsed.detail);
+          }
+        } catch {}
+      };
+      reader.readAsText(err.response.data);
+    }
     setError(message);
     console.error('API Error:', message);
   };
@@ -152,25 +165,24 @@ export const useApi = () => {
     }
   }, []);
 
-  const approveProposal = useCallback(async (leadId: string, approvedBy: string = 'Sales AI Reviewer') => {
+  const approveProposal = useCallback(async (leadId: string, approverName?: string) => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await apiClient.post(
         `/proposals/${leadId}/approve`,
-        { approved_by: approvedBy },
-        { params: { approved_by: approvedBy } }
+        { approver_name: approverName || 'Sales Leadership' },
+        { params: { approver_name: approverName || 'Sales Leadership' } }
       );
       return response.data;
     } catch (err) {
-      handleError(err as AxiosError);
+      await handleError(err as AxiosError);
       throw err;
     } finally {
       setLoading(false);
     }
   }, []);
-
 
   const exportProposal = useCallback(async (leadId: string, format: string = 'markdown'): Promise<ProposalExportResult> => {
     setLoading(true);
@@ -180,7 +192,7 @@ export const useApi = () => {
       const response = await apiClient.get(`/proposals/${leadId}/export?format=${format}`);
       return response.data;
     } catch (err) {
-      handleError(err as AxiosError);
+      await handleError(err as AxiosError);
       throw err;
     } finally {
       setLoading(false);
@@ -192,14 +204,26 @@ export const useApi = () => {
     setError(null);
 
     try {
-      const response = await apiClient.post(
-        `/proposals/${leadId}/pdf`,
-        { client_email: clientEmail },
-        {
-          params: clientEmail ? { client_email: clientEmail } : undefined,
-          responseType: 'blob',
-        }
-      );
+      let response;
+      try {
+        response = await apiClient.post(
+          `/proposals/${leadId}/pdf`,
+          { client_email: clientEmail },
+          {
+            params: clientEmail ? { client_email: clientEmail } : undefined,
+            responseType: 'blob',
+          }
+        );
+      } catch (postErr) {
+        console.warn('POST /pdf attempt failed, trying GET /pdf fallback...', postErr);
+        response = await apiClient.get(
+          `/proposals/${leadId}/pdf`,
+          {
+            params: clientEmail ? { client_email: clientEmail } : undefined,
+            responseType: 'blob',
+          }
+        );
+      }
 
       let filename = `Proposal_${(companyName || 'Client').replace(/[^a-zA-Z0-9_\-]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       const disposition = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
@@ -222,7 +246,7 @@ export const useApi = () => {
 
       return { success: true, filename };
     } catch (err) {
-      handleError(err as AxiosError);
+      await handleError(err as AxiosError);
       throw err;
     } finally {
       setLoading(false);
