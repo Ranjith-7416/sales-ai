@@ -1,7 +1,9 @@
-"""Email delivery service for proposal dispatching."""
 import smtplib
+import socket
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import make_msgid, formatdate
 from datetime import datetime
 import logging
 from typing import Dict, Any, Optional
@@ -9,6 +11,33 @@ from typing import Dict, Any, Optional
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def validate_email_address(email: Optional[str]) -> tuple[bool, str]:
+    """Validate RFC 5322 email address format and perform sanity checks."""
+    if not email or not isinstance(email, str):
+        return False, "Recipient email address is required and cannot be empty."
+
+    cleaned = email.strip()
+    if len(cleaned) < 5 or len(cleaned) > 320:
+        return False, f"Email address length ({len(cleaned)} chars) is invalid. Must be between 5 and 320 characters."
+
+    if " " in cleaned or "\t" in cleaned or "\n" in cleaned:
+        return False, "Email address cannot contain spaces or newline characters."
+
+    if ".." in cleaned:
+        return False, "Email address cannot contain consecutive dots."
+
+    if not EMAIL_REGEX.match(cleaned):
+        return False, f"Invalid email format: '{cleaned}'. Must be a valid address such as client@example.com."
+
+    domain_part = cleaned.split("@")[1]
+    if "." not in domain_part or domain_part.startswith(".") or domain_part.endswith("."):
+        return False, f"Invalid domain in email address: '{domain_part}'."
+
+    return True, cleaned
 
 
 def build_proposal_email_content(
@@ -197,10 +226,30 @@ def dispatch_proposal_email(
     request: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Dispatch proposal email to client.
-    If SMTP credentials are configured, connects and delivers via live SMTP.
-    If not configured or in offline/development fallback, records the email in the audit log.
+    Dispatch proposal email to client via real SMTP delivery.
+    Strictly enforces real SMTP transmission:
+    - Validates email syntax.
+    - Connects to the configured SMTP provider with TLS.
+    - Generates RFC-compliant headers and Message-ID.
+    - Verifies message acceptance by the SMTP server.
+    - NEVER simulates delivery or reports 'sent' when SMTP is unconfigured or fails.
     """
+    # 1. Validate recipient email syntax
+    is_valid, validation_msg = validate_email_address(recipient_email)
+    if not is_valid:
+        logger.warning(f"Email dispatch rejected due to invalid recipient: {validation_msg}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "invalid_email",
+            "recipient": recipient_email,
+            "subject": "",
+            "message": validation_msg,
+            "error": validation_msg,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    recipient_email = validation_msg  # sanitized address
     title = proposal_data.get("title", f"Enterprise Solution Proposal for {company_name}")
     subject = f"Enterprise Solution Proposal: {company_name}"
 
@@ -213,65 +262,169 @@ def dispatch_proposal_email(
         request=request,
     )
 
-    # Check if SMTP configuration is active
-    if settings.SMTP_HOST and settings.SMTP_USER:
-        try:
-            logger.info(f"Attempting live SMTP delivery to {recipient_email} via {settings.SMTP_HOST}:{settings.SMTP_PORT}")
-            
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = settings.SMTP_FROM_EMAIL
-            msg["To"] = recipient_email
+    # 2. Check if SMTP configuration is complete
+    if not (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD):
+        missing = []
+        if not settings.SMTP_HOST:
+            missing.append("SMTP_HOST")
+        if not settings.SMTP_USER:
+            missing.append("SMTP_USER")
+        if not settings.SMTP_PASSWORD:
+            missing.append("SMTP_PASSWORD")
 
-            part1 = MIMEText(text_body, "plain", "utf-8")
-            part2 = MIMEText(html_body, "html", "utf-8")
-            msg.attach(part1)
-            msg.attach(part2)
+        err_msg = f"Email delivery failed: SMTP server is not configured. Missing: {', '.join(missing)}. Please set SMTP credentials."
+        logger.warning(f"Proposal dispatch aborted for {recipient_email}: {err_msg}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "unconfigured",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": err_msg,
+            "error": f"SMTP unconfigured: {', '.join(missing)}",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
-            if settings.SMTP_PORT == 465:
-                server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=12)
-            else:
-                server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=12)
-                if settings.SMTP_USE_TLS:
-                    server.starttls()
+    # 3. Real live SMTP delivery
+    try:
+        logger.info(f"Initiating real SMTP delivery to {recipient_email} via {settings.SMTP_HOST}:{settings.SMTP_PORT}")
 
-            if settings.SMTP_PASSWORD:
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        from_address = settings.SMTP_FROM_EMAIL if settings.SMTP_FROM_EMAIL and "@" in settings.SMTP_FROM_EMAIL else settings.SMTP_USER
+        
+        domain = settings.SMTP_HOST
+        if "." in domain:
+            domain_parts = domain.split(".")
+            domain = ".".join(domain_parts[-2:])
+        message_id = make_msgid(domain=domain)
 
-            server.send_message(msg)
-            server.quit()
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_address
+        msg["To"] = recipient_email
+        msg["Reply-To"] = from_address
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = message_id
 
-            logger.info(f"Successfully delivered proposal email to {recipient_email}")
+        part1 = MIMEText(text_body, "plain", "utf-8")
+        part2 = MIMEText(html_body, "html", "utf-8")
+        msg.attach(part1)
+        msg.attach(part2)
+
+        if settings.SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+            server.ehlo()
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+                server.ehlo()
+
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        refused_recipients = server.send_message(msg)
+        server.quit()
+
+        if refused_recipients:
+            logger.error(f"SMTP rejected recipient {recipient_email}: {refused_recipients}")
             return {
-                "success": True,
-                "status": "sent",
+                "success": False,
+                "status": "failed",
                 "delivery_mode": "smtp_live",
                 "recipient": recipient_email,
                 "subject": subject,
-                "message": f"Proposal email successfully delivered to {recipient_email}",
+                "message": f"Email was rejected by SMTP server for recipient: {recipient_email}",
+                "error": f"Recipient refused: {refused_recipients}",
+                "message_id": message_id,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        except Exception as e:
-            logger.warning(f"SMTP live delivery encountered exception: {str(e)}. Recording email in delivery queue & audit log.")
-            return {
-                "success": True,
-                "status": "sent",
-                "delivery_mode": "audit_recorded",
-                "recipient": recipient_email,
-                "subject": subject,
-                "message": f"Proposal dispatched to {recipient_email} (Recorded in delivery queue; SMTP notice: {str(e)})",
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+        logger.info(f"Successfully transmitted proposal email to {recipient_email} [Message-ID: {message_id}]")
+        return {
+            "success": True,
+            "status": "sent",
+            "delivery_mode": "smtp_live",
+            "message_id": message_id,
+            "recipient": recipient_email,
+            "sender": from_address,
+            "subject": subject,
+            "smtp_host": settings.SMTP_HOST,
+            "message": f"Email accepted for delivery to {recipient_email}",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
 
-    # Default development / audit mode when SMTP is not configured
-    logger.info(f"SMTP not configured. Recording proposal dispatch to {recipient_email} in database audit log.")
-    return {
-        "success": True,
-        "status": "sent",
-        "delivery_mode": "audit_recorded",
-        "recipient": recipient_email,
-        "subject": subject,
-        "message": f"Proposal email dispatched to {recipient_email} (Audit logged in database)",
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+    except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"SMTP authentication failed for {settings.SMTP_USER}: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": "Email delivery failed: SMTP authentication error. Please verify your SMTP username and Gmail App Password.",
+            "error": "SMTP authentication failed. Verify credentials.",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except smtplib.SMTPConnectError as e:
+        logger.error(f"Failed to connect to SMTP server {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Email delivery failed: Could not connect to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}.",
+            "error": f"SMTP connection error: {str(e)}",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except (socket.timeout, TimeoutError) as e:
+        logger.error(f"SMTP connection timed out to {settings.SMTP_HOST}:{settings.SMTP_PORT}: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Email delivery failed: Connection to mail server at {settings.SMTP_HOST} timed out.",
+            "error": "SMTP connection timed out.",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except smtplib.SMTPRecipientsRefused as e:
+        logger.error(f"SMTP recipient {recipient_email} was refused: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Email delivery failed: Recipient address '{recipient_email}' was rejected by mail server.",
+            "error": f"Recipient refused: {str(e)}",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except smtplib.SMTPException as e:
+        logger.error(f"SMTP delivery exception: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Email delivery failed: SMTP server reported error: {str(e)}",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Unexpected error during proposal email dispatch: {e}")
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": "Email delivery failed due to an unexpected server error.",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat(),
+        }

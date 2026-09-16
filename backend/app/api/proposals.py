@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Proposal, Lead
+from app.models import Proposal, Lead, UserActivity
 from app.security import rate_limit, require_auth
-from app.services.email_service import dispatch_proposal_email, build_proposal_email_content
+from app.services.email_service import dispatch_proposal_email, build_proposal_email_content, validate_email_address
 from app.config import settings
 from datetime import datetime
 
@@ -174,24 +174,39 @@ async def send_proposal(
             lead.proposal_result = lead.pipeline_result.get("proposal")
 
         now = datetime.utcnow()
-        proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
-        
-        if not proposal:
-            proposal = Proposal(
-                id=str(uuid.uuid4()),
-                lead_id=lead_id,
-                proposal_markdown=json.dumps(lead.proposal_result or {}, indent=2),
-                status="sent",
-                sent_to=target_email,
-                sent_at=now,
-            )
-            db.add(proposal)
-        else:
-            proposal.status = "sent"
-            proposal.sent_to = target_email
-            proposal.sent_at = now
 
-        # Dispatch real email via SMTP service or record in audit queue
+        # Fallback if proposal_result is in pipeline_result
+        if not lead.proposal_result and lead.pipeline_result and isinstance(lead.pipeline_result, dict):
+            lead.proposal_result = lead.pipeline_result.get("proposal")
+
+        if not lead.proposal_result:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "status": "failed",
+                    "recipient": target_email or "",
+                    "message": "Cannot send proposal: No proposal has been generated for this lead yet.",
+                    "error": "No proposal generated",
+                },
+            )
+
+        # 1. Validate recipient email
+        is_valid, validation_msg = validate_email_address(target_email)
+        if not is_valid:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "status": "failed",
+                    "recipient": target_email or "",
+                    "message": validation_msg,
+                    "error": validation_msg,
+                },
+            )
+        target_email = validation_msg
+
+        # 2. Perform real SMTP dispatch
         email_result = dispatch_proposal_email(
             recipient_email=target_email,
             company_name=lead.company_name or "Valued Client",
@@ -200,32 +215,111 @@ async def send_proposal(
             request=request,
         )
 
+        proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
 
-        # Update lead proposal result with sent info
-        if isinstance(lead.proposal_result, dict):
-            updated_prop = dict(lead.proposal_result)
-            updated_prop["proposal_status"] = "sent"
-            updated_prop["status"] = "sent"
-            updated_prop["sent_to"] = target_email
-            updated_prop["sent_at"] = now.isoformat()
-            updated_prop["delivery_mode"] = email_result.get("delivery_mode", "audit_recorded")
-            lead.proposal_result = updated_prop
+        # 3. Conditional database audit & status update based on actual delivery result
+        if email_result.get("success") is True:
+            if not proposal:
+                proposal = Proposal(
+                    id=str(uuid.uuid4()),
+                    lead_id=lead_id,
+                    proposal_markdown=json.dumps(lead.proposal_result or {}, indent=2),
+                    status="sent",
+                    sent_to=target_email,
+                    sent_at=now,
+                )
+                db.add(proposal)
+            else:
+                proposal.status = "sent"
+                proposal.sent_to = target_email
+                proposal.sent_at = now
 
-        lead.updated_at = now
-        db.commit()
-        db.refresh(lead)
-        
-        logger.info(f"Proposal sent for lead {lead_id} to {target_email}: {email_result.get('message')}")
-        
-        return {
-            "message": email_result.get("message", f"Proposal sent successfully to {target_email}"),
-            "lead_id": lead_id,
-            "status": "sent",
-            "recipient": target_email,
-            "delivery_mode": email_result.get("delivery_mode", "audit_recorded"),
-            "sent_at": now.isoformat(),
-            "proposal": lead.proposal_result,
-        }
+            if isinstance(lead.proposal_result, dict):
+                updated_prop = dict(lead.proposal_result)
+                updated_prop["proposal_status"] = "sent"
+                updated_prop["status"] = "sent"
+                updated_prop["sent_to"] = target_email
+                updated_prop["sent_at"] = now.isoformat()
+                updated_prop["delivery_mode"] = email_result.get("delivery_mode", "smtp_live")
+                updated_prop["message_id"] = email_result.get("message_id")
+                lead.proposal_result = updated_prop
+
+            audit_log = UserActivity(
+                id=str(uuid.uuid4()),
+                action="proposal_email_sent",
+                lead_id=lead_id,
+                details={
+                    "recipient": target_email,
+                    "sender": email_result.get("sender"),
+                    "message_id": email_result.get("message_id"),
+                    "delivery_mode": email_result.get("delivery_mode", "smtp_live"),
+                    "smtp_host": email_result.get("smtp_host"),
+                    "timestamp": now.isoformat(),
+                },
+                created_at=now,
+            )
+            db.add(audit_log)
+
+            lead.updated_at = now
+            db.commit()
+            db.refresh(lead)
+
+            logger.info(f"Proposal successfully sent for lead {lead_id} to {target_email} [Message-ID: {email_result.get('message_id')}]")
+
+            return {
+                "success": True,
+                "status": "sent",
+                "lead_id": lead_id,
+                "recipient": target_email,
+                "message": email_result.get("message", f"Email accepted for delivery to {target_email}"),
+                "message_id": email_result.get("message_id"),
+                "delivery_mode": email_result.get("delivery_mode", "smtp_live"),
+                "sent_at": now.isoformat(),
+                "proposal": lead.proposal_result,
+            }
+        else:
+            # Delivery failed - DO NOT set status = "sent"
+            if proposal:
+                proposal.status = "failed"
+
+            if isinstance(lead.proposal_result, dict):
+                updated_prop = dict(lead.proposal_result)
+                updated_prop["proposal_status"] = "failed"
+                updated_prop["last_send_error"] = email_result.get("error")
+                updated_prop["last_send_attempt"] = now.isoformat()
+                lead.proposal_result = updated_prop
+
+            audit_log = UserActivity(
+                id=str(uuid.uuid4()),
+                action="proposal_email_failed",
+                lead_id=lead_id,
+                details={
+                    "recipient": target_email,
+                    "error": email_result.get("error"),
+                    "delivery_mode": email_result.get("delivery_mode"),
+                    "timestamp": now.isoformat(),
+                },
+                created_at=now,
+            )
+            db.add(audit_log)
+
+            lead.updated_at = now
+            db.commit()
+
+            logger.warning(f"Proposal delivery failed for lead {lead_id} to {target_email}: {email_result.get('error')}")
+
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "status": "failed",
+                    "lead_id": lead_id,
+                    "recipient": target_email,
+                    "message": email_result.get("message", "Email could not be sent."),
+                    "error": email_result.get("error", "SMTP delivery failure"),
+                    "delivery_mode": email_result.get("delivery_mode"),
+                },
+            )
     
     except HTTPException:
         raise

@@ -108,6 +108,11 @@ const Dashboard: React.FC = () => {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [smtpStatus, setSmtpStatus] = useState<{ configured: boolean; smtp_user?: string; smtp_host?: string } | null>(null);
+  const [showSmtpDrawer, setShowSmtpDrawer] = useState(false);
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [savingSmtp, setSavingSmtp] = useState(false);
 
   const api = useApi();
 
@@ -388,40 +393,88 @@ const Dashboard: React.FC = () => {
   const handleSendProposal = async () => {
     const target = (recipientEmail || '').trim();
     if (!leadId || !target) return;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(target)) {
+      setProposalNotification({
+        type: 'error',
+        message: 'Please enter a valid email address (e.g. client@company.com).',
+      });
+      return;
+    }
+
     setSendingEmail(true);
     setProposalNotification(null);
     try {
       const res = await api.sendProposal(leadId, target);
-      setProposalNotification({
-        type: 'success',
-        message: `📧 Proposal successfully dispatched to ${target}! ${res?.delivery_mode === 'smtp_live' ? 'Live email delivered.' : 'Recorded in dispatch audit log.'}`,
-      });
-      setShowSendModal(false);
-      setLead((prev) => {
-        if (!prev) return prev;
-        const updatedProposal = prev.proposal_result
-          ? {
-              ...prev.proposal_result,
-              proposal_status: 'sent',
-              status: 'sent',
-              sent_to: target,
-              sent_at: new Date().toISOString(),
-            }
-          : prev.proposal_result;
-        return {
-          ...prev,
-          proposal_result: updatedProposal,
-        };
-      });
+      if (res?.success) {
+        setProposalNotification({
+          type: 'success',
+          message: `Email accepted for delivery to ${target}`,
+        });
+        setShowSendModal(false);
+        setLead((prev) => {
+          if (!prev) return prev;
+          const updatedProposal = prev.proposal_result
+            ? {
+                ...prev.proposal_result,
+                proposal_status: 'sent',
+                status: 'sent',
+                sent_to: target,
+                sent_at: res.sent_at || new Date().toISOString(),
+                delivery_mode: res.delivery_mode,
+                message_id: res.message_id,
+              }
+            : prev.proposal_result;
+          return {
+            ...prev,
+            proposal_result: updatedProposal,
+          };
+        });
+      } else {
+        setProposalNotification({
+          type: 'error',
+          message: res?.message || 'Email could not be sent. Please check the recipient address or email configuration.',
+        });
+      }
     } catch (err: any) {
       console.error('Send failed:', err);
-      const errMsg = getErrorMessage(err, 'Failed to send proposal. Please try again.');
+      const serverMsg = err.response?.data?.message || err.response?.data?.error;
       setProposalNotification({
         type: 'error',
-        message: `Sending note: ${errMsg}`,
+        message: serverMsg || 'Email could not be sent. Please check the recipient address or email configuration.',
       });
     } finally {
       setSendingEmail(false);
+    }
+  };
+
+  const handleSaveSmtp = async () => {
+    if (!smtpUser.trim() || !smtpPassword.trim()) {
+      alert('Please enter both Gmail address and 16-character App Password.');
+      return;
+    }
+    try {
+      setSavingSmtp(true);
+      await api.updateSmtpConfig({
+        smtp_host: 'smtp.gmail.com',
+        smtp_port: 587,
+        smtp_user: smtpUser.trim(),
+        smtp_password: smtpPassword.trim(),
+        smtp_from_email: smtpUser.trim(),
+        smtp_use_tls: true,
+      });
+      setSmtpStatus({ configured: true, smtp_user: smtpUser.trim(), smtp_host: 'smtp.gmail.com' });
+      setShowSmtpDrawer(false);
+      setProposalNotification({
+        type: 'success',
+        message: 'SMTP credentials updated successfully. Ready for live email delivery.',
+      });
+    } catch (err: any) {
+      alert('Failed to save SMTP configuration: ' + getErrorMessage(err, 'Unknown error'));
+    } finally {
+      setSavingSmtp(false);
     }
   };
 
@@ -1141,10 +1194,17 @@ const Dashboard: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         const defaultEmail = lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
                         setRecipientEmail(defaultEmail);
                         setShowSendModal(true);
+                        try {
+                          const smtpInfo = await api.getSmtpConfig();
+                          setSmtpStatus(smtpInfo);
+                          if (smtpInfo?.smtp_user) setSmtpUser(smtpInfo.smtp_user);
+                        } catch (e) {
+                          // ignore
+                        }
                       }}
                       className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
                     >
@@ -1465,10 +1525,21 @@ const Dashboard: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel border border-white/[0.15] bg-slate-900/95 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Mail size={16} className="text-indigo-400" />
-                Transmit Proposal to Client
-              </h3>
+                <h3 className="text-sm font-bold text-white">
+                  Transmit Proposal to Client
+                </h3>
+                {smtpStatus && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    smtpStatus.configured
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                  }`}>
+                    {smtpStatus.configured ? '✓ SMTP Active' : '⚠️ SMTP Unconfigured'}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setShowSendModal(false)}
@@ -1489,6 +1560,62 @@ const Dashboard: React.FC = () => {
                   className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
                 />
               </div>
+
+              {/* SMTP configuration alert / drawer */}
+              {smtpStatus && !smtpStatus.configured && (
+                <div className="p-3 bg-amber-950/40 rounded-xl border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
+                      <AlertCircle size={13} className="text-amber-400 shrink-0" />
+                      Live SMTP Not Configured
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
+                    >
+                      {showSmtpDrawer ? 'Hide Settings' : 'Configure SMTP'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                    Real email delivery requires SMTP credentials (e.g. Gmail address &amp; 16-character App Password). Without SMTP, sending will be rejected.
+                  </p>
+
+                  {showSmtpDrawer && (
+                    <div className="pt-2 border-t border-amber-500/20 space-y-2 mt-2">
+                      <div>
+                        <label className="text-[10px] text-slate-300 font-medium">Gmail Address / Sender User</label>
+                        <input
+                          type="email"
+                          value={smtpUser}
+                          onChange={(e) => setSmtpUser(e.target.value)}
+                          placeholder="your.account@gmail.com"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-300 font-medium">Gmail App Password (16 characters)</label>
+                        <input
+                          type="password"
+                          value={smtpPassword}
+                          onChange={(e) => setSmtpPassword(e.target.value)}
+                          placeholder="abcd efgh ijkl mnop"
+                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveSmtp}
+                        disabled={savingSmtp || !smtpUser || !smtpPassword}
+                        className="w-full mt-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+                      >
+                        {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                        {savingSmtp ? 'Saving...' : 'Save & Enable SMTP'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Client Email Preview & Sign-off Portal Banner */}
               <div className="p-3 bg-slate-800/60 rounded-xl border border-white/[0.08] space-y-1.5">
@@ -1512,7 +1639,9 @@ const Dashboard: React.FC = () => {
               </div>
 
               <p className="text-[11px] text-slate-400">
-                Dispatches to client and registers receipt in the audit log. Live inbox delivery is active when SMTP is configured.
+                {smtpStatus?.configured
+                  ? `Real email delivery active via ${smtpStatus.smtp_host} (${smtpStatus.smtp_user}).`
+                  : 'Real email transmission will connect directly to your configured mail server.'}
               </p>
             </div>
 
@@ -1527,11 +1656,11 @@ const Dashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSendProposal}
-                disabled={sendingEmail || !recipientEmail}
+                disabled={sendingEmail || !recipientEmail.trim()}
                 className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
               >
                 {sendingEmail ? <Loader size={14} className="animate-spin text-white" /> : <Mail size={14} />}
-                {sendingEmail ? 'Transmitting...' : 'Confirm & Send'}
+                {sendingEmail ? 'Sending...' : 'Confirm & Send'}
               </button>
             </div>
           </div>

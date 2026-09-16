@@ -333,24 +333,43 @@ def test_proposal_approval_and_send_workflows(client):
     finally:
         db.close()
 
-    # 2. Send via JSON Body
-    send_res = client.post(
-        f"/api/proposals/{lead_id}/send",
-        json={"recipient_email": "jane@approvalcorp.com"},
-    )
-    assert send_res.status_code == 200
-    send_data = send_res.json()
-    assert send_data["status"] == "sent"
-    assert send_data["recipient"] == "jane@approvalcorp.com"
-
-    db = db_module.SessionLocal()
+    # 2. Send via JSON Body with mock SMTP credentials
+    original_host = settings.SMTP_HOST
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
     try:
-        prop_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
-        assert prop_record.status == "sent"
-        assert prop_record.sent_to == "jane@approvalcorp.com"
-        assert prop_record.sent_at is not None
+        settings.SMTP_HOST = "smtp.gmail.com"
+        settings.SMTP_PORT = 587
+        settings.SMTP_USER = "jane@approvalcorp.com"
+        settings.SMTP_PASSWORD = "testapppassword123"
+        settings.SMTP_USE_TLS = True
+
+        from unittest.mock import MagicMock, patch
+        mock_server = MagicMock()
+        mock_server.send_message.return_value = {}
+
+        with patch("smtplib.SMTP", return_value=mock_server):
+            send_res = client.post(
+                f"/api/proposals/{lead_id}/send",
+                json={"recipient_email": "jane@approvalcorp.com"},
+            )
+            assert send_res.status_code == 200
+            send_data = send_res.json()
+            assert send_data["status"] == "sent"
+            assert send_data["recipient"] == "jane@approvalcorp.com"
+
+            db = db_module.SessionLocal()
+            try:
+                prop_record = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+                assert prop_record.status == "sent"
+                assert prop_record.sent_to == "jane@approvalcorp.com"
+                assert prop_record.sent_at is not None
+            finally:
+                db.close()
     finally:
-        db.close()
+        settings.SMTP_HOST = original_host
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
 
 
 def test_proposal_email_view_and_accept_portal(client):
