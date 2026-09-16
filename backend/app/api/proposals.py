@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -6,6 +6,7 @@ from app.models import Proposal, Lead, UserActivity
 from app.security import rate_limit, require_auth
 from app.services.email_service import dispatch_proposal_email, build_proposal_email_content, validate_email_address
 from app.services.proposal_generator import ensure_lead_proposal
+from app.services.pdf_service import build_proposal_pdf_bytes, sanitize_pdf_filename
 from app.config import settings
 from datetime import datetime
 
@@ -30,6 +31,10 @@ class ProposalSendRequest(BaseModel):
     subject: Optional[str] = Field(default=None, description="Email subject line")
     message: Optional[str] = Field(default=None, description="Email message or introductory text")
 
+
+class ProposalPdfRequest(BaseModel):
+    client_email: Optional[str] = Field(default=None, description="Client recipient email to display prominently on proposal PDF")
+    company_name: Optional[str] = Field(default=None, description="Company name override")
 
 
 class ProposalGenerateRequest(BaseModel):
@@ -366,14 +371,114 @@ async def send_proposal(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{lead_id}/pdf")
+@router.get("/{lead_id}/pdf")
+async def generate_or_download_proposal_pdf(
+    lead_id: str,
+    client_email: Optional[str] = None,
+    payload: Optional[ProposalPdfRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate and download a professional business proposal PDF.
+    Prominently displays client email on top header and bottom recipient block for manual client sharing.
+    Does NOT require email credentials and does NOT send any automatic email.
+    """
+    target_id = lead_id
+    lead = db.query(Lead).filter(Lead.id == target_id).first()
+    if not lead:
+        prop_rec = db.query(Proposal).filter(Proposal.id == target_id).first()
+        if prop_rec:
+            lead = db.query(Lead).filter(Lead.id == prop_rec.lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead or Proposal not found")
+
+    target_email = None
+    if payload and payload.client_email:
+        target_email = payload.client_email.strip()
+    elif client_email:
+        target_email = client_email.strip()
+    elif lead.email:
+        target_email = lead.email.strip()
+
+    if target_email:
+        is_valid, validated_email = validate_email_address(target_email)
+        if is_valid:
+            target_email = validated_email
+            if not lead.email:
+                lead.email = target_email
+                db.commit()
+
+    p_data = ensure_lead_proposal(lead, db)
+    pdf_bytes = build_proposal_pdf_bytes(
+        lead,
+        p_data,
+        client_email=target_email,
+        reviewer_data=getattr(lead, "reviewer_result", None),
+    )
+    filename = sanitize_pdf_filename(lead.company_name or "Client")
+
+    # Update proposal metadata: PDF ready to share, never claiming email sent
+    proposal = db.query(Proposal).filter(Proposal.lead_id == lead_id).first()
+    if proposal and proposal.status not in ("approved", "sent"):
+        proposal.status = "ready"
+
+    if isinstance(lead.proposal_result, dict):
+        updated_prop = dict(lead.proposal_result)
+        updated_prop["pdf_ready"] = True
+        updated_prop["pdf_generated_at"] = datetime.utcnow().isoformat()
+        if updated_prop.get("status") not in ("approved", "sent"):
+            updated_prop["status"] = "ready"
+            updated_prop["proposal_status"] = "ready"
+        lead.proposal_result = updated_prop
+
+    # Record activity
+    audit_log = UserActivity(
+        id=str(uuid.uuid4()),
+        action="proposal_pdf_generated",
+        lead_id=lead_id,
+        details={
+            "recipient_email": target_email or getattr(lead, "email", None),
+            "company": lead.company_name,
+            "filename": filename,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+        created_at=datetime.utcnow(),
+    )
+    db.add(audit_log)
+    db.commit()
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
 @router.get("/{lead_id}/export")
 async def export_proposal(lead_id: str, format: str = "markdown", db: Session = Depends(get_db)):
-    """Export proposal formatted as clean Markdown or HTML document"""
+    """Export proposal formatted as clean Markdown, HTML, or PDF document"""
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     p = ensure_lead_proposal(lead, db)
     company = lead.company_name or "Valued Client"
+
+    if format.lower() == "pdf":
+        pdf_bytes = build_proposal_pdf_bytes(lead, p, client_email=lead.email)
+        filename = sanitize_pdf_filename(company)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+
     date_str = datetime.utcnow().strftime("%B %d, %Y")
 
     # Build structured markdown

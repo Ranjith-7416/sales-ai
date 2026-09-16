@@ -35,8 +35,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-import { API_BASE_URL } from '../config';
-
 // Radial SVG Gauge for Lead Qualification Score
 
 const ScoreDial: React.FC<{ score: number; status: string }> = ({ score, status }) => {
@@ -107,27 +105,11 @@ const Dashboard: React.FC = () => {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
-  const [showSendModal, setShowSendModal] = useState(false);
-  const [sendingEmail, setSendingEmail] = useState(false);
-  const [recipientEmail, setRecipientEmail] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailMessage, setEmailMessage] = useState('');
-  const [smtpStatus, setSmtpStatus] = useState<{
-    configured: boolean;
-    active_provider?: string;
-    provider_display?: string;
-    smtp_user?: string;
-    smtp_host?: string;
-    smtp_port?: number;
-    has_password?: boolean;
-    is_render?: boolean;
-  } | null>(null);
-  const [showSmtpDrawer, setShowSmtpDrawer] = useState(false);
-  const [smtpUser, setSmtpUser] = useState('');
-  const [smtpPassword, setSmtpPassword] = useState('');
-  const [savingSmtp, setSavingSmtp] = useState(false);
-  const [testingSmtp, setTestingSmtp] = useState(false);
-  const [sendModalNotification, setSendModalNotification] = useState<{
+  const [showPdfModal, setShowPdfModal] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [clientRecipientEmail, setClientRecipientEmail] = useState('');
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
+  const [pdfNotification, setPdfNotification] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
@@ -460,202 +442,71 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleOpenSendModal = async () => {
-    const company = lead?.company_name || 'Client';
-    const defaultEmail = lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
-    setRecipientEmail(defaultEmail);
-    setEmailSubject(lead?.proposal_result?.title ? `${lead.proposal_result.title} — ${company}` : `Strategic Solution Proposal — ${company}`);
-    const summaryText = lead?.proposal_result?.executive_summary || lead?.proposal_result?.summary || 'Tailored technical architecture and implementation roadmap.';
-    setEmailMessage(
-      `Hello ${company} Team,\n\nPlease find attached our strategic proposal for your consideration.\n\nSummary:\n${summaryText}\n\nWe look forward to partnering with you.`
-    );
-    setSendModalNotification(null);
-    setShowSendModal(true);
-    try {
-      const smtpInfo = await api.getSmtpConfig();
-      setSmtpStatus(smtpInfo);
-      if (smtpInfo?.smtp_user) setSmtpUser(smtpInfo.smtp_user);
-      if (!smtpInfo?.configured) {
-        setShowSmtpDrawer(true);
-      }
-    } catch (e) {
-      setShowSmtpDrawer(true);
-    }
+  const handleGeneratePdfClick = async () => {
+    const defaultEmail = clientRecipientEmail || lead?.email || (lead?.company_name ? `contact@${lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'client@enterprise.com');
+    setClientRecipientEmail(defaultEmail);
+    setShowPdfModal(true);
+    await handleGenerateAndDownloadPdf(defaultEmail);
   };
 
-  const handleSendProposal = async () => {
-    const target = (recipientEmail || '').trim();
-    if (!leadId || !target) return;
-
-    setSendModalNotification(null);
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(target)) {
-      const msg = 'Please enter a valid recipient email address (e.g. client@company.com).';
-      setSendModalNotification({
-        type: 'error',
-        message: msg,
-      });
-      setProposalNotification({
-        type: 'error',
-        message: msg,
-      });
-      return;
-    }
-
-    // Check if SMTP is configured before attempting send
-    if (smtpStatus && !smtpStatus.configured) {
-      setShowSmtpDrawer(true);
-      const msg = 'Email failed to send. Gmail SMTP is not configured. Please enter your Gmail address and 16-character Google App Password below and click "Save & Enable Gmail SMTP (Port 587)".';
-      setSendModalNotification({
-        type: 'error',
-        message: msg,
-      });
-      return;
-    }
-
-    setSendingEmail(true);
-    try {
-      const res = await api.sendProposal(
-        leadId,
-        target,
-        emailSubject.trim() || undefined,
-        emailMessage.trim() || undefined
-      );
-      if (res?.success) {
-        const successMsg = `Email sent successfully to ${target}`;
-        setSendModalNotification({
-          type: 'success',
-          message: successMsg,
-        });
-        setProposalNotification({
-          type: 'success',
-          message: successMsg,
-        });
-        setLead((prev) => {
-          if (!prev) return prev;
-          const updatedProposal = prev.proposal_result
-            ? {
-                ...prev.proposal_result,
-                proposal_status: 'sent',
-                status: 'sent',
-                sent_to: target,
-                sent_at: res.sent_at || new Date().toISOString(),
-                delivery_mode: res.delivery_mode,
-                message_id: res.message_id,
-              }
-            : prev.proposal_result;
-          return {
-            ...prev,
-            proposal_result: updatedProposal,
-          };
-        });
-
-        // Close modal after brief delay so user can see transmission confirmation
-        setTimeout(() => {
-          setShowSendModal(false);
-          setSendModalNotification(null);
-        }, 2200);
-      } else {
-        const errMsg = res?.message || 'Email failed to send.';
-        setSendModalNotification({
+  const handleGenerateAndDownloadPdf = async (overrideEmail?: string) => {
+    if (!leadId) return;
+    const target = (overrideEmail !== undefined ? overrideEmail : (clientRecipientEmail || '')).trim();
+    if (target) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(target)) {
+        setPdfNotification({
           type: 'error',
-          message: errMsg,
+          message: 'Please enter a valid client email address (e.g. client@company.com).',
         });
-        setProposalNotification({
-          type: 'error',
-          message: errMsg,
-        });
-        if (errMsg.includes('SMTP') || errMsg.includes('configured')) {
-          setShowSmtpDrawer(true);
-        }
+        return;
       }
-    } catch (err: any) {
-      console.error('Send failed:', err);
-      const serverErr = err.response?.data?.error || err.response?.data?.message || err.message;
-      const finalMsg = `Email failed to send. ${serverErr ? `Reason: ${serverErr}` : ''}`.trim();
-      setSendModalNotification({
-        type: 'error',
-        message: finalMsg,
-      });
-      setProposalNotification({
-        type: 'error',
-        message: finalMsg,
-      });
-      if (finalMsg.includes('SMTP') || finalMsg.includes('configured') || finalMsg.includes('Missing') || finalMsg.includes('authentication') || finalMsg.includes('credentials') || finalMsg.includes('101')) {
-        setShowSmtpDrawer(true);
-      }
-    } finally {
-      setSendingEmail(false);
     }
-  };
 
-  const handleTestSmtp = async () => {
+    setGeneratingPdf(true);
+    setPdfNotification(null);
     try {
-      setTestingSmtp(true);
-      setSendModalNotification(null);
-      const res = await api.testSmtpConnection();
-      setSendModalNotification({
+      const res = await api.downloadProposalPdf(leadId, target || undefined, lead?.company_name);
+      setPdfDownloaded(true);
+      const successMsg = `Proposal PDF downloaded successfully (${res.filename}). Attach this file in your email client to send to the client.`;
+      setPdfNotification({
         type: 'success',
-        message: res.message || '✅ Gmail SMTP connected and authenticated successfully!',
-      });
-    } catch (err: any) {
-      const errMsg = getErrorMessage(err, 'SMTP connection test failed');
-      setSendModalNotification({
-        type: 'error',
-        message: `❌ ${errMsg}`,
-      });
-    } finally {
-      setTestingSmtp(false);
-    }
-  };
-
-  const handleSaveSmtp = async () => {
-    if (!smtpUser.trim() || !smtpPassword.trim()) {
-      setSendModalNotification({
-        type: 'error',
-        message: 'Please enter both your Gmail address and 16-character Google App Password.',
-      });
-      return;
-    }
-    try {
-      setSavingSmtp(true);
-      setSendModalNotification(null);
-      const res = await api.updateSmtpConfig({
-        smtp_host: 'smtp.gmail.com',
-        smtp_port: 587,
-        smtp_username: smtpUser.trim(),
-        smtp_password: smtpPassword.trim(),
-        smtp_from_email: smtpUser.trim(),
-        smtp_use_tls: true,
-      });
-      setSmtpStatus({
-        configured: res.configured,
-        active_provider: res.active_provider,
-        provider_display: res.provider_display,
-        smtp_user: res.smtp_user || smtpUser.trim(),
-        smtp_host: res.smtp_host || 'smtp.gmail.com',
-        smtp_port: res.smtp_port || 587,
-        has_password: res.has_password,
-      });
-      setShowSmtpDrawer(false);
-      setSendModalNotification({
-        type: 'success',
-        message: '✅ Gmail SMTP configuration saved successfully! Ready for live delivery.',
+        message: successMsg,
       });
       setProposalNotification({
         type: 'success',
-        message: 'Gmail SMTP credentials updated successfully.',
+        message: 'PDF READY ✓ Your proposal PDF has been generated successfully. Download the proposal PDF and manually attach it to your email to send it to the client.',
+      });
+      setLead((prev) => {
+        if (!prev) return prev;
+        const updatedProposal = prev.proposal_result
+          ? {
+              ...prev.proposal_result,
+              proposal_status: 'ready',
+              status: 'ready',
+              pdf_ready: true,
+              pdf_generated_at: new Date().toISOString(),
+            }
+          : prev.proposal_result;
+        return {
+          ...prev,
+          email: target || prev.email,
+          proposal_result: updatedProposal,
+        };
       });
     } catch (err: any) {
-      const errMsg = getErrorMessage(err, 'Failed to save Gmail SMTP configuration');
-      setSendModalNotification({
+      console.error('PDF generation failed:', err);
+      const errMsg = getErrorMessage(err, 'Failed to generate proposal PDF');
+      setPdfNotification({
         type: 'error',
-        message: `Failed to save SMTP configuration: ${errMsg}`,
+        message: errMsg,
+      });
+      setProposalNotification({
+        type: 'error',
+        message: errMsg,
       });
     } finally {
-      setSavingSmtp(false);
+      setGeneratingPdf(false);
     }
   };
 
@@ -1390,19 +1241,22 @@ const Dashboard: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={handleOpenSendModal}
-                      className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
+                      onClick={handleGeneratePdfClick}
+                      disabled={generatingPdf}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
                     >
-                      <Mail size={14} /> Send to Client
+                      {generatingPdf ? (
+                        <>
+                          <Loader size={14} className="animate-spin text-white" />
+                          <span>Generating PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={14} />
+                          <span>Generate PDF</span>
+                        </>
+                      )}
                     </button>
-                    <a
-                      href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
-                    >
-                      <ExternalLink size={13} /> Preview Email
-                    </a>
                   </div>
                 </div>
 
@@ -1597,19 +1451,22 @@ const Dashboard: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={handleOpenSendModal}
-                      className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
+                      onClick={handleGeneratePdfClick}
+                      disabled={generatingPdf}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-purple-500/20"
                     >
-                      <Mail size={14} /> Send to Client
+                      {generatingPdf ? (
+                        <>
+                          <Loader size={14} className="animate-spin text-white" />
+                          <span>Generating PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText size={14} />
+                          <span>Generate PDF</span>
+                        </>
+                      )}
                     </button>
-                    <a
-                      href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
-                    >
-                      <ExternalLink size={13} /> Preview Email
-                    </a>
                   </div>
                 </div>
 
@@ -1719,299 +1576,140 @@ const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Send Proposal Modal */}
-      {showSendModal && (
+      {/* Proposal PDF Sharing Modal */}
+      {showPdfModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel border border-white/[0.15] bg-slate-900/95 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2.5">
-                <Mail size={16} className="text-indigo-400" />
+                <FileText size={16} className="text-indigo-400" />
                 <h3 className="text-sm font-bold text-white">
-                  Transmit Proposal to Client
+                  {pdfDownloaded ? 'PDF READY ✓' : 'Generate Proposal PDF'}
                 </h3>
-                {smtpStatus && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                    smtpStatus.configured
-                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-                  }`}>
-                    {smtpStatus.configured ? '✓ SMTP Active' : '⚠️ SMTP Unconfigured'}
-                  </span>
-                )}
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setShowSendModal(false);
-                  setSendModalNotification(null);
+                  setShowPdfModal(false);
+                  setPdfNotification(null);
                 }}
-                className="text-slate-400 hover:text-white transition p-1"
+                className="text-slate-400 hover:text-white transition p-1 cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
 
-            {/* In-Modal Notification / Error Banner */}
-            {sendModalNotification && (
+            {/* In-Modal Notification */}
+            {pdfNotification && (
               <div
                 className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
-                  sendModalNotification.type === 'error'
+                  pdfNotification.type === 'error'
                     ? 'bg-red-950/70 border-red-500/40 text-red-300'
-                    : sendModalNotification.type === 'success'
-                    ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
-                    : 'bg-indigo-950/70 border-indigo-500/40 text-indigo-300'
+                    : 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
                 }`}
               >
-                {sendModalNotification.type === 'error' ? (
+                {pdfNotification.type === 'error' ? (
                   <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
                 ) : (
                   <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
                 )}
-                <div className="leading-relaxed">{sendModalNotification.message}</div>
+                <div className="leading-relaxed">{pdfNotification.message}</div>
+              </div>
+            )}
+
+            {pdfDownloaded && (
+              <div className="p-3.5 bg-emerald-950/50 border border-emerald-500/30 rounded-xl text-center space-y-1">
+                <div className="text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  <span>PDF READY ✓</span>
+                </div>
+                <p className="text-[11px] text-emerald-200">
+                  Your proposal PDF has been generated successfully.
+                </p>
               </div>
             )}
 
             <div className="space-y-3.5">
+              <div className="p-3 bg-slate-800/60 rounded-xl border border-white/[0.08] space-y-1">
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Prepared For</div>
+                <div className="text-sm font-bold text-white">{lead?.company_name || 'Valued Client'}</div>
+              </div>
+
               <div>
                 <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
-                  <span>Client Recipient Email</span>
-                  <span className="text-[10px] text-slate-400">Target inbox to receive proposal</span>
+                  <span>Recipient Client Email</span>
+                  <span className="text-[10px] text-slate-400">Printed on PDF</span>
                 </label>
                 <input
                   type="email"
-                  value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  value={clientRecipientEmail}
+                  onChange={(e) => setClientRecipientEmail(e.target.value)}
                   placeholder="client@company.com"
                   className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
                 />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
-                  <span>Subject</span>
-                  <span className="text-[10px] text-slate-400">Email subject line</span>
-                </label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="Strategic Solution Proposal — Company"
-                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300 font-medium flex items-center justify-between">
-                  <span>Message / Proposal</span>
-                  <span className="text-[10px] text-slate-400">Accompanying note & proposal content</span>
-                </label>
-                <textarea
-                  rows={4}
-                  value={emailMessage}
-                  onChange={(e) => setEmailMessage(e.target.value)}
-                  placeholder="Enter message or introductory note for client..."
-                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 mt-1 resize-y"
-                />
-              </div>
-
-              {/* Email Delivery Configuration Alert & Setup Drawer */}
-              {smtpStatus?.configured && smtpStatus?.active_provider === 'smtp' ? (
-                <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/30 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 text-emerald-300 text-[11px] font-medium">
-                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-                      <span>
-                        Active Provider: <strong className="text-white font-semibold">Gmail SMTP ({smtpStatus.smtp_host || 'smtp.gmail.com'}:{smtpStatus.smtp_port || 587})</strong>
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleTestSmtp}
-                        disabled={testingSmtp}
-                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
-                      >
-                        {testingSmtp ? 'Testing...' : 'Test Connection'}
-                      </button>
-                      <span className="text-emerald-700">•</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
-                        className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
-                      >
-                        {showSmtpDrawer ? 'Close' : 'Update Credentials'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="text-[10px] text-emerald-300/80 flex items-center justify-between">
-                    <span>
-                      Authenticated Mailbox: <strong className="text-white font-mono">{smtpStatus.smtp_user}</strong>
-                    </span>
-                    <span className="text-emerald-400 font-mono text-[9px] bg-emerald-900/50 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                      STARTTLS Active
-                    </span>
-                  </div>
-
-                  {showSmtpDrawer && (
-                    <div className="pt-2.5 border-t border-emerald-500/20 space-y-2 mt-2">
-                      <div>
-                        <label className="text-[10px] text-slate-300 font-medium">Gmail Address</label>
-                        <input
-                          type="email"
-                          value={smtpUser}
-                          onChange={(e) => setSmtpUser(e.target.value)}
-                          placeholder="your.account@gmail.com"
-                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1"
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] text-slate-300 font-medium">New 16-Character Gmail App Password</label>
-                          <a
-                            href="https://myaccount.google.com/apppasswords"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-amber-300 hover:text-white underline inline-flex items-center gap-1 font-semibold"
-                          >
-                            Generate Code <ExternalLink size={10} />
-                          </a>
-                        </div>
-                        <input
-                          type="password"
-                          value={smtpPassword}
-                          onChange={(e) => setSmtpPassword(e.target.value)}
-                          placeholder="Enter new 16-character App Password"
-                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 font-mono"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSaveSmtp}
-                        disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
-                        className="w-full px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                      >
-                        {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                        {savingSmtp ? 'Saving...' : 'Update Gmail SMTP'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="p-3.5 bg-amber-950/40 rounded-xl border border-amber-500/30 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1.5">
-                      <AlertCircle size={14} className="text-amber-400 shrink-0" />
-                      Gmail SMTP Setup Required
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowSmtpDrawer(!showSmtpDrawer)}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
-                    >
-                      {showSmtpDrawer ? 'Collapse' : 'Configure Gmail SMTP'}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-amber-200/80 leading-relaxed">
-                    To transmit real emails to <span className="font-semibold text-white">{recipientEmail || 'client'}</span>, configure Gmail SMTP (<strong className="text-white">smtp.gmail.com:587</strong>) with your Gmail address and 16-character Google App Password.
-                  </p>
-
-                  {showSmtpDrawer && (
-                    <div className="pt-2.5 border-t border-amber-500/20 space-y-2.5 mt-2">
-                      <div className="p-2 bg-slate-900/80 rounded-lg border border-white/[0.08] text-[10px] text-slate-300 leading-relaxed">
-                        <strong>Gmail App Password:</strong> Generate a 16-character code in Google Account &gt; Security &gt; 2-Step Verification &gt; App Passwords.
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-slate-300 font-medium">Gmail Address (Sender Mailbox)</label>
-                        <input
-                          type="email"
-                          value={smtpUser}
-                          onChange={(e) => setSmtpUser(e.target.value)}
-                          placeholder="your.account@gmail.com"
-                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] text-slate-300 font-medium">16-Character Gmail App Password</label>
-                          <a
-                            href="https://myaccount.google.com/apppasswords"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-amber-300 hover:text-white underline inline-flex items-center gap-1 font-semibold"
-                          >
-                            Generate at Google <ExternalLink size={10} />
-                          </a>
-                        </div>
-                        <input
-                          type="password"
-                          value={smtpPassword}
-                          onChange={(e) => setSmtpPassword(e.target.value)}
-                          placeholder="abcd efgh ijkl mnop"
-                          className="w-full bg-slate-900 border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-xs text-white mt-1 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSaveSmtp}
-                        disabled={savingSmtp || !smtpUser.trim() || !smtpPassword.trim()}
-                        className="w-full mt-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md shadow-indigo-600/30"
-                      >
-                        {savingSmtp ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
-                        {savingSmtp ? 'Saving...' : 'Save & Enable Gmail SMTP (Port 587)'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Client Email Preview & Sign-off Portal Banner */}
-              <div className="p-3 bg-slate-800/60 rounded-xl border border-white/[0.08] space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-indigo-400" />
-                    Interactive Customer Portal
-                  </span>
-                  <a
-                    href={`${API_BASE_URL}/proposals/${leadId}/email-view`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
-                  >
-                    <ExternalLink size={11} /> Preview HTML Email
-                  </a>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Email includes an interactive <span className="text-emerald-400 font-semibold">✓ Accept Proposal &amp; Confirm Kickoff</span> button that marks deals Qualified and reserves onboarding slots.
+                <p className="text-[10px] text-slate-400 mt-1">
+                  This client email will appear prominently on the top title block and bottom recipient block of the generated PDF.
                 </p>
               </div>
 
-              <p className="text-[11px] text-slate-400">
-                {smtpStatus?.configured
-                  ? `Real email delivery active via ${smtpStatus.smtp_host} (${smtpStatus.smtp_user}).`
-                  : 'Without configured SMTP credentials, server delivery will be rejected per production policy.'}
-              </p>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleGenerateAndDownloadPdf()}
+                  disabled={generatingPdf}
+                  className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
+                >
+                  {generatingPdf ? (
+                    <>
+                      <Loader size={14} className="animate-spin text-white" />
+                      <span>Generating PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileDown size={14} />
+                      <span>Download Proposal PDF</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="p-2.5 bg-slate-800/40 rounded-xl border border-white/[0.05]">
+                <p className="text-[11px] text-slate-300 text-center leading-relaxed">
+                  Download the proposal PDF and manually attach it to your email to send it to the client.
+                </p>
+              </div>
+
+              {pdfDownloaded && (
+                <div className="pt-2 border-t border-white/[0.08] space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const to = encodeURIComponent(clientRecipientEmail.trim());
+                      const su = encodeURIComponent(`Strategic Solution Proposal — ${lead?.company_name || 'Client'}`);
+                      window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${su}`, '_blank');
+                    }}
+                    className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-white/[0.1] rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Gmail</span>
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">
+                    Opens Gmail in a new tab so you can attach the downloaded PDF and send it manually.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+            <div className="flex items-center justify-end pt-2 border-t border-white/[0.06]">
               <button
                 type="button"
                 onClick={() => {
-                  setShowSendModal(false);
-                  setSendModalNotification(null);
+                  setShowPdfModal(false);
+                  setPdfNotification(null);
                 }}
                 className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition cursor-pointer"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendProposal}
-                disabled={sendingEmail || !recipientEmail.trim()}
-                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-lg shadow-indigo-500/20"
-              >
-                {sendingEmail ? <Loader size={14} className="animate-spin text-white" /> : <Mail size={14} />}
-                {sendingEmail ? 'Sending email...' : 'Confirm & Send'}
+                Close
               </button>
             </div>
           </div>

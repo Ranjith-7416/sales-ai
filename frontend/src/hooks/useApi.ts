@@ -171,20 +171,13 @@ export const useApi = () => {
     }
   }, []);
 
-  const sendProposal = useCallback(async (leadId: string, email: string, subject?: string, message?: string) => {
+
+  const exportProposal = useCallback(async (leadId: string, format: string = 'markdown'): Promise<ProposalExportResult> => {
     setLoading(true);
     setError(null);
 
     try {
-      const payload: Record<string, any> = { recipient_email: email };
-      if (subject) payload.subject = subject;
-      if (message) payload.message = message;
-
-      const response = await apiClient.post(
-        `/proposals/${leadId}/send`,
-        payload,
-        { params: { recipient_email: email } }
-      );
+      const response = await apiClient.get(`/proposals/${leadId}/export?format=${format}`);
       return response.data;
     } catch (err) {
       handleError(err as AxiosError);
@@ -194,13 +187,40 @@ export const useApi = () => {
     }
   }, []);
 
-  const exportProposal = useCallback(async (leadId: string, format: string = 'markdown'): Promise<ProposalExportResult> => {
+  const downloadProposalPdf = useCallback(async (leadId: string, clientEmail?: string, companyName?: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await apiClient.get(`/proposals/${leadId}/export?format=${format}`);
-      return response.data;
+      const response = await apiClient.post(
+        `/proposals/${leadId}/pdf`,
+        { client_email: clientEmail },
+        {
+          params: clientEmail ? { client_email: clientEmail } : undefined,
+          responseType: 'blob',
+        }
+      );
+
+      let filename = `Proposal_${(companyName || 'Client').replace(/[^a-zA-Z0-9_\-]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const disposition = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1].trim();
+        }
+      }
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      return { success: true, filename };
     } catch (err) {
       handleError(err as AxiosError);
       throw err;
@@ -343,7 +363,7 @@ export const useApi = () => {
     getProposal,
     generateProposal,
     approveProposal,
-    sendProposal,
+    downloadProposalPdf,
     exportProposal,
     getScoringConfig,
     updateScoringConfig,
@@ -367,7 +387,7 @@ export const useApi = () => {
     getProposal,
     generateProposal,
     approveProposal,
-    sendProposal,
+    downloadProposalPdf,
     exportProposal,
     getScoringConfig,
     updateScoringConfig,

@@ -68,6 +68,7 @@ app.add_middleware(
 # Include routers
 app.include_router(leads.router, prefix="/api/leads", tags=["Leads"])
 app.include_router(proposals.router, prefix="/api/proposals", tags=["Proposals"])
+app.include_router(proposals.router, prefix="/api/proposal", tags=["Proposals"])
 app.include_router(knowledge_base.router, prefix="/api/knowledge-base", tags=["Knowledge Base"])
 app.include_router(config_api.router, prefix="/api/config", tags=["Configuration"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
