@@ -112,13 +112,16 @@ class Settings(BaseSettings):
     ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Sales AI Director")
     ADMIN_ROLE: str = os.getenv("ADMIN_ROLE", "admin")
 
-    # SMTP Email Delivery Configuration
+    # Email Delivery Configuration (SMTP & HTTP API Providers)
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
     SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
     SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "sales@salesai-platform.com")
     SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY")
+    BREVO_API_KEY: Optional[str] = os.getenv("BREVO_API_KEY")
+    SENDGRID_API_KEY: Optional[str] = os.getenv("SENDGRID_API_KEY")
 
     # Production Deployment & URL Resolution
     RENDER_EXTERNAL_URL: Optional[str] = os.getenv("RENDER_EXTERNAL_URL")

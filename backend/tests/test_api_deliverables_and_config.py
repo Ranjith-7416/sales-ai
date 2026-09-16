@@ -214,6 +214,7 @@ def test_twelve_required_deliverables_structure(client):
             inquiry_text="We need an AI-powered document processing solution capable of extracting information from approximately 10,000 PDF documents per month.",
             lead_status="Qualified",
             composite_score=86.0,
+            created_at=datetime.utcnow(),
             completed_at=datetime.utcnow(),
             pipeline_result=pipeline_data,
             proposal_result=pipeline_data["proposal_result"],

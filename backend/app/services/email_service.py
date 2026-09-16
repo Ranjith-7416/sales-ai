@@ -1,6 +1,7 @@
 import smtplib
 import socket
 import re
+import httpx
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import make_msgid, formatdate
@@ -217,6 +218,146 @@ sales@salesai-platform.com
     return text_content, html_content
 
 
+def send_via_resend(
+    api_key: str,
+    recipient_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    from_email: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Transmit email via Resend HTTP REST API over HTTPS port 443 (Allowed on Render Free Tier)."""
+    # Resend onboarding sandbox requires sender to be onboarding@resend.dev unless custom domain is verified
+    sender = from_email if (from_email and "@" in from_email and not from_email.endswith("@gmail.com")) else "Sales AI <onboarding@resend.dev>"
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "from": sender,
+                    "to": [recipient_email],
+                    "subject": subject,
+                    "html": html_body,
+                    "text": text_body,
+                },
+            )
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                msg_id = data.get("id", f"resend-{datetime.utcnow().timestamp()}")
+                logger.info("Successfully transmitted proposal email to %s via Resend API [ID: %s]", recipient_email, msg_id)
+                return {
+                    "success": True,
+                    "status": "sent",
+                    "delivery_mode": "resend_api",
+                    "message_id": msg_id,
+                    "recipient": recipient_email,
+                    "sender": sender,
+                    "subject": subject,
+                    "message": f"Email accepted for delivery to {recipient_email} via Resend API",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            else:
+                err_data = resp.json() if "json" in resp.headers.get("content-type", "") else {}
+                err_msg = err_data.get("message", resp.text)
+                logger.error("Resend API rejected delivery to %s: %s (status %d)", recipient_email, err_msg, resp.status_code)
+                return {
+                    "success": False,
+                    "status": "failed",
+                    "delivery_mode": "resend_api",
+                    "recipient": recipient_email,
+                    "subject": subject,
+                    "message": f"Resend API delivery failed: {err_msg}",
+                    "error": err_msg,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+    except Exception as e:
+        logger.error("HTTP error connecting to Resend API: %s", e)
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "resend_api_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Could not connect to Resend API over port 443: {str(e)}",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
+def send_via_brevo(
+    api_key: str,
+    recipient_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    from_email: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Transmit email via Brevo HTTP REST API over HTTPS port 443 (Allowed on Render Free Tier)."""
+    sender_email = from_email if (from_email and "@" in from_email) else "sales@salesai-platform.com"
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers={
+                    "api-key": api_key.strip(),
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                json={
+                    "sender": {"name": "Sales AI", "email": sender_email},
+                    "to": [{"email": recipient_email}],
+                    "subject": subject,
+                    "htmlContent": html_body,
+                    "textContent": text_body,
+                },
+            )
+            if resp.status_code in (200, 201, 202):
+                data = resp.json()
+                msg_id = data.get("messageId", f"brevo-{datetime.utcnow().timestamp()}")
+                logger.info("Successfully transmitted proposal email to %s via Brevo API [ID: %s]", recipient_email, msg_id)
+                return {
+                    "success": True,
+                    "status": "sent",
+                    "delivery_mode": "brevo_api",
+                    "message_id": msg_id,
+                    "recipient": recipient_email,
+                    "sender": sender_email,
+                    "subject": subject,
+                    "message": f"Email accepted for delivery to {recipient_email} via Brevo API",
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            else:
+                err_data = resp.json() if "json" in resp.headers.get("content-type", "") else {}
+                err_msg = err_data.get("message", resp.text)
+                logger.error("Brevo API rejected delivery to %s: %s (status %d)", recipient_email, err_msg, resp.status_code)
+                return {
+                    "success": False,
+                    "status": "failed",
+                    "delivery_mode": "brevo_api",
+                    "recipient": recipient_email,
+                    "subject": subject,
+                    "message": f"Brevo API delivery failed: {err_msg}",
+                    "error": err_msg,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+    except Exception as e:
+        logger.error("HTTP error connecting to Brevo API: %s", e)
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "brevo_api_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Could not connect to Brevo API over port 443: {str(e)}",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
 def dispatch_proposal_email(
     recipient_email: str,
     company_name: str,
@@ -226,13 +367,13 @@ def dispatch_proposal_email(
     request: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Dispatch proposal email to client via real SMTP delivery.
-    Strictly enforces real SMTP transmission:
+    Dispatch proposal email to client via real SMTP or HTTP Email API delivery.
+    Strictly enforces real transmission:
     - Validates email syntax.
-    - Connects to the configured SMTP provider with TLS.
+    - Connects to real email delivery provider (Resend / Brevo API over HTTPS port 443, or SMTP over TLS).
     - Generates RFC-compliant headers and Message-ID.
-    - Verifies message acceptance by the SMTP server.
-    - NEVER simulates delivery or reports 'sent' when SMTP is unconfigured or fails.
+    - Verifies message acceptance by the email provider.
+    - NEVER simulates delivery or reports 'sent' when unconfigured or failing.
     """
     # 1. Validate recipient email syntax
     is_valid, validation_msg = validate_email_address(recipient_email)
@@ -262,7 +403,31 @@ def dispatch_proposal_email(
         request=request,
     )
 
-    # 2. Check if SMTP configuration is complete
+    # 2. Priority A: Resend HTTP REST API (Over HTTPS port 443 - 100% permitted on Render Free Tier)
+    if settings.RESEND_API_KEY:
+        logger.info(f"Initiating HTTP API delivery to {recipient_email} via Resend API")
+        return send_via_resend(
+            api_key=settings.RESEND_API_KEY,
+            recipient_email=recipient_email,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            from_email=settings.SMTP_FROM_EMAIL or settings.SMTP_USER,
+        )
+
+    # 2. Priority B: Brevo HTTP REST API (Over HTTPS port 443 - 100% permitted on Render Free Tier)
+    if settings.BREVO_API_KEY:
+        logger.info(f"Initiating HTTP API delivery to {recipient_email} via Brevo API")
+        return send_via_brevo(
+            api_key=settings.BREVO_API_KEY,
+            recipient_email=recipient_email,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            from_email=settings.SMTP_FROM_EMAIL or settings.SMTP_USER,
+        )
+
+    # 3. Priority C: Standard Direct SMTP Delivery (ports 587/465)
     if not (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD):
         missing = []
         if not settings.SMTP_HOST:
@@ -272,7 +437,11 @@ def dispatch_proposal_email(
         if not settings.SMTP_PASSWORD:
             missing.append("SMTP_PASSWORD")
 
-        err_msg = f"Email delivery failed: SMTP server is not configured. Missing: {', '.join(missing)}. Please set SMTP credentials."
+        err_msg = (
+            f"Email delivery failed: SMTP server is not configured. "
+            f"Missing: {', '.join(missing)} or HTTP Email API Key (Resend / Brevo). "
+            f"Please configure an email delivery provider."
+        )
         logger.warning(f"Proposal dispatch aborted for {recipient_email}: {err_msg}")
         return {
             "success": False,
@@ -285,7 +454,7 @@ def dispatch_proposal_email(
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-    # 3. Real live SMTP delivery
+    # 4. Real live SMTP delivery
     try:
         logger.info(f"Initiating real SMTP delivery to {recipient_email} via {settings.SMTP_HOST}:{settings.SMTP_PORT}")
 
@@ -359,7 +528,7 @@ def dispatch_proposal_email(
             "delivery_mode": "smtp_error",
             "recipient": recipient_email,
             "subject": subject,
-            "message": "Email delivery failed: SMTP authentication error. Please verify your SMTP username and Gmail App Password.",
+            "message": "Email delivery failed: SMTP authentication error. Please verify your SMTP username and Gmail App Password (16 characters, 2-step verification must be enabled on Google).",
             "error": "SMTP authentication failed. Verify credentials.",
             "timestamp": datetime.utcnow().isoformat(),
         }
@@ -416,6 +585,31 @@ def dispatch_proposal_email(
             "timestamp": datetime.utcnow().isoformat(),
         }
 
+    except OSError as e:
+        err_str = str(e)
+        logger.error(f"Network OS error during SMTP connection: {e}")
+        if getattr(e, "errno", None) == 101 or "Network is unreachable" in err_str:
+            msg = (
+                f"Email delivery failed: Outbound SMTP ports ({settings.SMTP_PORT}) are blocked by host network "
+                f"[Errno 101: Network is unreachable]. "
+                f"Render Free Tier prohibits traffic on ports 25, 465, and 587. "
+                f"To send live emails on Render Free Tier, please provide a free Resend API key (over HTTPS port 443) or upgrade to a Render paid instance."
+            )
+        elif getattr(e, "errno", None) == 111 or "Connection refused" in err_str:
+            msg = f"Email delivery failed: Connection refused to mail server at {settings.SMTP_HOST}:{settings.SMTP_PORT}."
+        else:
+            msg = f"Email delivery failed due to network socket error: {err_str}"
+        return {
+            "success": False,
+            "status": "failed",
+            "delivery_mode": "smtp_network_error",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": msg,
+            "error": err_str,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
     except Exception as e:
         logger.error(f"Unexpected error during proposal email dispatch: {e}")
         return {
@@ -424,7 +618,7 @@ def dispatch_proposal_email(
             "delivery_mode": "error",
             "recipient": recipient_email,
             "subject": subject,
-            "message": "Email delivery failed due to an unexpected server error.",
+            "message": f"Email delivery failed: {str(e)}",
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat(),
         }

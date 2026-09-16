@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 import smtplib
 import uuid
+import httpx
 
 from fastapi.testclient import TestClient
 from app.main import app
@@ -336,3 +337,73 @@ def test_send_proposal_api_success_mocked_smtp(client, db_session):
         settings.SMTP_HOST = original_host
         settings.SMTP_USER = original_user
         settings.SMTP_PASSWORD = original_pass
+
+
+def test_http_api_resend_delivery(monkeypatch):
+    """Verify proposal dispatch via Resend REST API (port 443)."""
+    original_resend = settings.RESEND_API_KEY
+    try:
+        settings.RESEND_API_KEY = "re_test_dummy_key_123"
+
+        class DummyResponse:
+            status_code = 200
+            headers = {"content-type": "application/json"}
+            def json(self):
+                return {"id": "resend_msg_mock_999"}
+
+        def dummy_post(*args, **kwargs):
+            return DummyResponse()
+
+        monkeypatch.setattr(httpx.Client, "post", dummy_post)
+
+        res = dispatch_proposal_email(
+            recipient_email="client@example.com",
+            company_name="Acme Inc",
+            proposal_data={"title": "Cloud Migration Proposal"},
+            lead_id="lead-resend-test",
+        )
+
+        assert res["success"] is True
+        assert res["status"] == "sent"
+        assert res["delivery_mode"] == "resend_api"
+        assert res["message_id"] == "resend_msg_mock_999"
+        assert "Resend API" in res["message"]
+    finally:
+        settings.RESEND_API_KEY = original_resend
+
+
+def test_oserror_errno_101_render_blocked_message(monkeypatch):
+    """Verify OSError [Errno 101] returns actionable Render Free Tier port block explanation."""
+    original_host = settings.SMTP_HOST
+    original_user = settings.SMTP_USER
+    original_pass = settings.SMTP_PASSWORD
+    try:
+        settings.SMTP_HOST = "smtp.gmail.com"
+        settings.SMTP_PORT = 587
+        settings.SMTP_USER = "sender@gmail.com"
+        settings.SMTP_PASSWORD = "testpassword123"
+
+        def raise_errno_101(*args, **kwargs):
+            err = OSError(101, "Network is unreachable")
+            raise err
+
+        monkeypatch.setattr(smtplib, "SMTP", raise_errno_101)
+
+        res = dispatch_proposal_email(
+            recipient_email="client@example.com",
+            company_name="Acme Inc",
+            proposal_data={"title": "Cloud Migration Proposal"},
+            lead_id="lead-oserror-test",
+        )
+
+        assert res["success"] is False
+        assert res["status"] == "failed"
+        assert res["delivery_mode"] == "smtp_network_error"
+        assert "Render Free Tier" in res["message"]
+        assert "Resend" in res["message"]
+        assert "101" in res["error"] or "Network is unreachable" in res["error"]
+    finally:
+        settings.SMTP_HOST = original_host
+        settings.SMTP_USER = original_user
+        settings.SMTP_PASSWORD = original_pass
+

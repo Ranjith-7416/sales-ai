@@ -90,47 +90,94 @@ async def update_scoring_config(config: ScoringConfigSchema):
 
 
 class SmtpConfigSchema(BaseModel):
-    smtp_host: str = Field(default="smtp.gmail.com", description="SMTP hostname")
-    smtp_port: int = Field(default=587, description="SMTP port")
-    smtp_user: str = Field(..., description="SMTP sender username or Gmail address")
-    smtp_password: str = Field(..., description="SMTP password or 16-character Gmail App Password")
+    smtp_host: Optional[str] = Field(default="smtp.gmail.com", description="SMTP hostname")
+    smtp_port: Optional[int] = Field(default=587, description="SMTP port")
+    smtp_user: Optional[str] = Field(default=None, description="SMTP sender username or Gmail address")
+    smtp_password: Optional[str] = Field(default=None, description="SMTP password or 16-character Gmail App Password")
     smtp_from_email: Optional[str] = Field(default=None, description="Sender from header email")
-    smtp_use_tls: bool = Field(default=True, description="Enable STARTTLS encryption")
+    smtp_use_tls: Optional[bool] = Field(default=True, description="Enable STARTTLS encryption")
+    resend_api_key: Optional[str] = Field(default=None, description="Resend HTTP API key (port 443)")
+    brevo_api_key: Optional[str] = Field(default=None, description="Brevo HTTP API key (port 443)")
+    sendgrid_api_key: Optional[str] = Field(default=None, description="SendGrid HTTP API key (port 443)")
 
 
 @router.get("/smtp")
 async def get_smtp_config():
-    """Retrieve current SMTP configuration status (with credentials masked)"""
-    is_configured = bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
+    """Retrieve current email delivery configuration status (with credentials masked)"""
+    has_smtp = bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
+    has_resend = bool(settings.RESEND_API_KEY)
+    has_brevo = bool(settings.BREVO_API_KEY)
+    has_sendgrid = bool(settings.SENDGRID_API_KEY)
+    is_configured = has_smtp or has_resend or has_brevo or has_sendgrid
+
+    active_provider = "unconfigured"
+    if has_resend:
+        active_provider = "resend_api"
+    elif has_brevo:
+        active_provider = "brevo_api"
+    elif has_sendgrid:
+        active_provider = "sendgrid_api"
+    elif has_smtp:
+        active_provider = "smtp"
+
     return {
         "configured": is_configured,
+        "active_provider": active_provider,
+        "has_http_api": bool(has_resend or has_brevo or has_sendgrid),
         "smtp_host": settings.SMTP_HOST or "smtp.gmail.com",
         "smtp_port": settings.SMTP_PORT,
         "smtp_user": settings.SMTP_USER or "",
         "smtp_from_email": settings.SMTP_FROM_EMAIL or "sales@salesai-platform.com",
         "smtp_use_tls": settings.SMTP_USE_TLS,
         "has_password": bool(settings.SMTP_PASSWORD),
-        "note": "Configure a 16-character Gmail App Password for instant inbox delivery.",
+        "has_resend_api_key": has_resend,
+        "has_brevo_api_key": has_brevo,
+        "has_sendgrid_api_key": has_sendgrid,
+        "is_render": bool(settings.RENDER),
+        "render_free_smtp_blocked": bool(settings.RENDER and not (has_resend or has_brevo or has_sendgrid)),
+        "note": "Render Free Tier blocks outbound ports 25, 465, and 587. For Render, use an HTTP Email API (Resend / Brevo) over HTTPS port 443.",
     }
 
 
 @router.post("/smtp")
 async def update_smtp_config(config: SmtpConfigSchema):
-    """Update SMTP settings dynamically for live client email delivery"""
-    settings.SMTP_HOST = config.smtp_host.strip()
-    settings.SMTP_PORT = config.smtp_port
-    settings.SMTP_USER = config.smtp_user.strip()
-    settings.SMTP_PASSWORD = config.smtp_password.strip()
+    """Update email delivery settings dynamically for live client email delivery"""
+    if config.resend_api_key and config.resend_api_key.strip():
+        settings.RESEND_API_KEY = config.resend_api_key.strip()
+    if config.brevo_api_key and config.brevo_api_key.strip():
+        settings.BREVO_API_KEY = config.brevo_api_key.strip()
+    if config.sendgrid_api_key and config.sendgrid_api_key.strip():
+        settings.SENDGRID_API_KEY = config.sendgrid_api_key.strip()
+
+    if config.smtp_host:
+        settings.SMTP_HOST = config.smtp_host.strip()
+    if config.smtp_port is not None:
+        settings.SMTP_PORT = config.smtp_port
+    if config.smtp_user:
+        settings.SMTP_USER = config.smtp_user.strip()
+    if config.smtp_password:
+        settings.SMTP_PASSWORD = config.smtp_password.strip()
     if config.smtp_from_email and config.smtp_from_email.strip():
         settings.SMTP_FROM_EMAIL = config.smtp_from_email.strip()
-    else:
+    elif config.smtp_user and "@" in config.smtp_user:
         settings.SMTP_FROM_EMAIL = config.smtp_user.strip()
-    settings.SMTP_USE_TLS = config.smtp_use_tls
+    if config.smtp_use_tls is not None:
+        settings.SMTP_USE_TLS = config.smtp_use_tls
 
-    logger.info("SMTP configuration updated dynamically for user: %s", settings.SMTP_USER)
+    active_provider = (
+        "resend_api" if settings.RESEND_API_KEY
+        else "brevo_api" if settings.BREVO_API_KEY
+        else "sendgrid_api" if settings.SENDGRID_API_KEY
+        else "smtp" if (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
+        else "unconfigured"
+    )
+
+    logger.info("Email delivery configuration updated dynamically: provider=%s", active_provider)
     return {
-        "message": "SMTP configuration updated successfully",
+        "message": "Email delivery configuration updated successfully",
         "configured": True,
+        "active_provider": active_provider,
+        "has_http_api": bool(settings.RESEND_API_KEY or settings.BREVO_API_KEY or settings.SENDGRID_API_KEY),
         "smtp_host": settings.SMTP_HOST,
         "smtp_port": settings.SMTP_PORT,
         "smtp_user": settings.SMTP_USER,
