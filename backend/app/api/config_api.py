@@ -199,6 +199,22 @@ async def test_smtp_connection():
                 "message": "Gmail SMTP authentication failed. Please verify your Gmail address and 16-character Google App Password (2-Step Verification must be turned ON in Google Account settings).",
             },
         )
+    except OSError as e:
+        err_str = str(e)
+        if getattr(e, "errno", None) == 101 or "Network is unreachable" in err_str:
+            msg = (
+                f"SMTP connection failed: Outbound port {settings.SMTP_PORT} is blocked by host network "
+                f"([Errno 101] Network is unreachable). Render Free Tier prohibits traffic on outbound ports 25, 465, and 587."
+            )
+        else:
+            msg = f"SMTP connection failed due to network socket error: {err_str}"
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": msg,
+            },
+        )
     except Exception as e:
         return JSONResponse(
             status_code=400,
