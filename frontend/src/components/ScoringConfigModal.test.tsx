@@ -37,7 +37,7 @@ describe('ScoringConfigModal', () => {
       render(<ScoringConfigModal isOpen={true} onClose={handleClose} />);
     });
 
-    expect(screen.getByRole('heading', { name: /Configurable Qualification Engine/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Qualification Engine Tuning/i })).toBeInTheDocument();
 
     const applyButton = screen.getByRole('button', { name: /Apply Configuration/i });
     expect(applyButton).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('ScoringConfigModal', () => {
     await act(async () => {
       renderResult.rerender(<ScoringConfigModal isOpen={false} onClose={handleClose} />);
     });
-    expect(screen.queryByRole('heading', { name: /Configurable Qualification Engine/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Qualification Engine Tuning/i })).not.toBeInTheDocument();
 
     // Reopen modal
     await act(async () => {

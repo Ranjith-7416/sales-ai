@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
+import { API_BASE_URL } from '../config';
 import { Lead, LeadInput, LeadStatus, ResearchResult, RequirementResult, QualificationResult, SolutionMatchingResult, ProposalResult, ReviewerResult } from '../types';
 import {
   Loader,
@@ -498,10 +499,10 @@ const Dashboard: React.FC = () => {
       console.warn('Axios PDF download error, triggering direct browser download fallback...', err);
       try {
         const queryParams = target ? `?client_email=${encodeURIComponent(target)}` : '';
-        const fallbackUrl = `/api/proposals/${leadId}/pdf${queryParams}`;
+        const fallbackUrl = `${API_BASE_URL}/proposals/${leadId}/pdf${queryParams}`;
         const link = document.createElement('a');
         link.href = fallbackUrl;
-        link.setAttribute('download', `Proposal_${(lead?.company_name || 'Client').replace(/[^a-zA-Z0-9_\-]/g, '_')}.pdf`);
+        link.setAttribute('download', `Proposal_${(lead?.company_name || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
         link.setAttribute('target', '_blank');
         document.body.appendChild(link);
         link.click();

@@ -17,7 +17,7 @@ export const useApi = () => {
   const [error, setError] = useState<string | null>(null);
 
   const handleError = (err: AxiosError<any>) => {
-    let message = err.response?.data?.detail || err.message || 'An error occurred';
+    const message = err.response?.data?.detail || err.message || 'An error occurred';
     // If response is a blob containing JSON error details
     if (err.response?.data instanceof Blob) {
       const reader = new FileReader();
@@ -27,7 +27,9 @@ export const useApi = () => {
           if (parsed.detail) {
             setError(parsed.detail);
           }
-        } catch {}
+        } catch {
+          // ignore non-json blob parse error
+        }
       };
       reader.readAsText(err.response.data);
     }
@@ -225,7 +227,7 @@ export const useApi = () => {
         );
       }
 
-      let filename = `Proposal_${(companyName || 'Client').replace(/[^a-zA-Z0-9_\-]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      let filename = `Proposal_${(companyName || 'Client').replace(/[^a-zA-Z0-9_-]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
       const disposition = response.headers?.['content-disposition'] || response.headers?.['Content-Disposition'];
       if (disposition && disposition.includes('filename=')) {
         const match = disposition.match(/filename="?([^";]+)"?/);

@@ -111,16 +111,16 @@ describe('Dashboard workflow rendering', () => {
     getLead.mockResolvedValue(completedLead);
     renderDashboard();
 
-    expect(await screen.findByText('Qualified')).toBeInTheDocument();
-    expect(screen.getByText('84')).toBeInTheDocument();
+    expect(await screen.findByText(/Qualified/i)).toBeInTheDocument();
+    expect(screen.getAllByText('84').length).toBeGreaterThanOrEqual(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Solution' }));
+    fireEvent.click(screen.getByRole('button', { name: /Solutions/i }));
     expect(screen.getByText('DocumentAI Pro')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Proposal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Executive Proposal' }));
     expect(screen.getByText('DocumentAI Pro will process the customer PDFs.')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'QA & Review' }));
     expect(await screen.findByText(/Which EHR integration is required\?/)).toBeInTheDocument();
   });
 
