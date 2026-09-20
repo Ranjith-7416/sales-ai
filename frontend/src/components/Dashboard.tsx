@@ -541,8 +541,8 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6">
       {/* Top Banner & Opportunity Hero Card */}
       <div className="glass-panel border border-white/[0.08] rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-        {/* Glow ambient highlight */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        {/* Fire glow ambient highlight */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-orange-500/20 via-red-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-white/[0.08]">
           {/* Company Title & ID */}
@@ -912,11 +912,11 @@ const Dashboard: React.FC = () => {
           <div className="space-y-6">
             {/* Qualification Narrative */}
             {qualification && (
-              <div className="glass-card p-6 rounded-2xl border border-indigo-500/30 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+              <div className="glass-card p-6 rounded-2xl border border-orange-500/25 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-orange-500/15 to-transparent rounded-full blur-2xl pointer-events-none" />
                 <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Sparkles size={18} className="text-cyan-400" />
-                  <span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
+                  <Sparkles size={18} className="text-amber-400" />
+                  <span className="bg-gradient-to-r from-amber-300 via-orange-400 to-red-400 bg-clip-text text-transparent">
                     AI Qualification Reasoning & Strategy
                   </span>
                 </h2>

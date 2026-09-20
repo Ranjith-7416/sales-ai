@@ -341,11 +341,11 @@ const InputForm: React.FC<InputFormProps> = ({ onLeadSubmitted }) => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 mx-auto flex items-center justify-center text-indigo-400">
+                  <div className="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/25 mx-auto flex items-center justify-center text-orange-400">
                     <UploadCloud size={24} />
                   </div>
                   <div className="text-sm font-medium text-slate-300">
-                    <span className="text-cyan-400 font-semibold underline underline-offset-2">Click to browse</span> or drag and drop customer RFP
+                    <span className="text-amber-400 font-semibold underline underline-offset-2">Click to browse</span> or drag and drop customer RFP
                   </div>
                   <p className="text-xs text-slate-500">Document parser extracts tables, OCR, requirements, and compliance rules automatically</p>
                 </div>

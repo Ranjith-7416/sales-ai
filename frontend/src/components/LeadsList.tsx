@@ -306,7 +306,7 @@ const LeadsList: React.FC = () => {
         {/* Lead Cards List */}
         {filteredLeads.length === 0 ? (
           <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-white/10 bg-slate-900/30">
-            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-center text-orange-400">
               <Sparkles size={24} />
             </div>
             <h3 className="text-lg font-bold text-white mb-1">

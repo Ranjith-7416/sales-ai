@@ -12,107 +12,180 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #080c14;
-  color: #f1f5f9;
+  background-color: #070302;
+  color: #ffedd5;
   overflow-x: hidden;
 }
 
-/* Deep Space Aurora Ambient Background */
+/* =========================================================================
+   FIERY MAGMA & EMBER AMBIENT BACKGROUND
+   ========================================================================= */
+
+@keyframes flame-ambient-pulse {
+  0% {
+    opacity: 0.88;
+    filter: saturate(105%) brightness(100%);
+  }
+  50% {
+    opacity: 1;
+    filter: saturate(125%) brightness(112%);
+  }
+  100% {
+    opacity: 0.88;
+    filter: saturate(105%) brightness(100%);
+  }
+}
+
+@keyframes ember-drift {
+  0% {
+    background-position: 0px 0px, 0px 0px, 0px 0px;
+  }
+  100% {
+    background-position: 30px -700px, -40px -900px, 20px -500px;
+  }
+}
+
 .app-shell {
   min-height: 100vh;
-  background-color: #080c14;
+  background-color: #070302;
   background-image: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.18) 0px, transparent 45%),
-    radial-gradient(at 100% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
-    radial-gradient(at 50% 50%, rgba(168, 85, 247, 0.10) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(20, 184, 166, 0.12) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(99, 102, 241, 0.15) 0px, transparent 50%);
+    /* Bottom Blazing Magma Core */
+    radial-gradient(ellipse 110% 70% at 50% 100%, rgba(220, 38, 38, 0.32) 0%, rgba(234, 88, 12, 0.22) 32%, rgba(245, 158, 11, 0.12) 58%, transparent 80%),
+    /* Left Rising Fire Surge */
+    radial-gradient(ellipse 70% 60% at 0% 35%, rgba(249, 115, 22, 0.22) 0%, rgba(185, 28, 28, 0.16) 38%, transparent 68%),
+    /* Right Warm Ember Flare */
+    radial-gradient(ellipse 65% 55% at 100% 30%, rgba(245, 158, 11, 0.20) 0%, rgba(220, 38, 38, 0.14) 38%, transparent 68%),
+    /* Top Molten Amber Crown */
+    radial-gradient(circle at 50% -10%, rgba(251, 146, 60, 0.14) 0%, rgba(185, 28, 28, 0.08) 45%, transparent 70%),
+    /* Center Hearth Glow */
+    radial-gradient(at 50% 50%, rgba(153, 27, 27, 0.14) 0px, rgba(234, 88, 12, 0.06) 45%, transparent 70%);
   background-attachment: fixed;
   position: relative;
   isolation: isolate;
+  animation: flame-ambient-pulse 10s ease-in-out infinite;
 }
 
-/* Futuristic Subtle Tech Grid */
+/* Fiery Ash & Heat Haze Mesh */
 .app-shell::before {
   content: '';
   position: fixed;
   inset: 0;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(249, 115, 22, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(249, 115, 22, 0.035) 1px, transparent 1px);
   background-size: 36px 36px;
   pointer-events: none;
   z-index: -1;
 }
 
-/* Glassmorphism Panels */
+/* Floating Burning Embers Effect */
+.fire-embers {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 90%, rgba(251, 191, 36, 0.85) 50%, transparent 100%),
+    radial-gradient(2px 2px at 35% 85%, rgba(249, 115, 22, 0.9) 50%, transparent 100%),
+    radial-gradient(1px 1px at 55% 95%, rgba(239, 68, 68, 0.85) 50%, transparent 100%),
+    radial-gradient(2px 2px at 75% 80%, rgba(245, 158, 11, 0.9) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 92%, rgba(251, 146, 60, 0.85) 50%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 28% 70%, rgba(245, 158, 11, 0.75) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 68% 65%, rgba(239, 68, 68, 0.75) 50%, transparent 100%),
+    radial-gradient(2px 2px at 48% 45%, rgba(251, 191, 36, 0.6) 50%, transparent 100%),
+    radial-gradient(1px 1px at 82% 40%, rgba(249, 115, 22, 0.65) 50%, transparent 100%);
+  background-size: 340px 420px, 460px 520px, 290px 360px;
+  animation: ember-drift 22s linear infinite;
+  z-index: 0;
+  opacity: 0.65;
+}
+
+/* =========================================================================
+   FIERY VOLCANIC GLASSMORPHISM
+   ========================================================================= */
+
 .glass-panel {
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(18, 9, 7, 0.76);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.16);
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(251, 146, 60, 0.22),
+    0 0 35px rgba(220, 38, 38, 0.08);
 }
 
 .glass-card {
-  background: rgba(30, 41, 59, 0.45);
+  background: rgba(28, 13, 9, 0.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(249, 115, 22, 0.13);
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card:hover {
-  background: rgba(30, 41, 59, 0.7);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(36, 16, 11, 0.78);
+  border-color: rgba(249, 115, 22, 0.45);
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), 0 0 20px rgba(99, 102, 241, 0.18);
+  box-shadow: 
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 0 25px rgba(249, 115, 22, 0.22);
 }
 
 .glass-input-card {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(22, 10, 8, 0.65);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(249, 115, 22, 0.16);
   transition: all 0.2s ease;
 }
 
 .glass-input-card:focus-within {
-  background: rgba(15, 23, 42, 0.9);
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 1px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.25);
+  background: rgba(28, 12, 9, 0.92);
+  border-color: #f97316;
+  box-shadow: 0 0 0 1px #f97316, 0 0 22px rgba(249, 115, 22, 0.38);
   transform: translateY(-1px);
 }
 
-/* Glowing Badges & Status */
+/* =========================================================================
+   GLOWING BADGES & FIERY STATUS
+   ========================================================================= */
+
+.glow-fire {
+  box-shadow: 0 0 22px rgba(249, 115, 22, 0.5), 0 0 45px rgba(220, 38, 38, 0.3);
+}
+
+.glow-flame {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.45);
+}
+
+.glow-amber {
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.45);
+}
+
 .glow-emerald {
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
 }
 
-.glow-amber {
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35);
-}
-
 .glow-indigo {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.35);
 }
 
 .glow-cyan {
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
+  box-shadow: 0 0 20px rgba(251, 146, 60, 0.35);
 }
 
-/* Animations */
+/* Radar pulse with fire ember color */
 @keyframes radar-pulse {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7);
   }
   70% {
     transform: scale(1.05);
-    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
   }
 }
 
@@ -121,10 +194,11 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 9999px;
-  background-color: #22c55e;
+  background-color: #f97316;
   animation: radar-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
 }
 
+/* Fiery Shimmer Button */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -137,42 +211,67 @@ body {
 
 .shimmer-btn:hover {
   background-position: right center;
-  box-shadow: 0 0 25px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 25px rgba(249, 115, 22, 0.5);
   transform: translateY(-1px);
 }
 
-/* Custom Sleek Scrollbar */
+/* =========================================================================
+   FIERY CUSTOM SCROLLBAR
+   ========================================================================= */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #080c14;
+  background: #080302;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: linear-gradient(180deg, #f59e0b 0%, #ea580c 50%, #dc2626 100%);
   border-radius: 4px;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(180deg, #fde047 0%, #f97316 50%, #ef4444 100%);
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.7);
 }
 
-/* Legacy utility support */
+/* =========================================================================
+   LEGACY UTILITY SUPPORT WITH FIRE THEME
+   ========================================================================= */
+
 .card {
-  @apply bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl p-6 shadow-xl;
+  @apply bg-stone-950/70 backdrop-blur-md border border-orange-500/15 rounded-xl p-6 shadow-xl;
 }
 
 .card-hover {
-  @apply cursor-pointer transition hover:border-indigo-500/50 hover:shadow-2xl hover:-translate-y-0.5;
+  @apply cursor-pointer transition hover:border-orange-500/50 hover:shadow-2xl hover:-translate-y-0.5;
 }
 
 .btn-primary {
-  @apply bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white px-4 py-2 rounded-xl font-semibold transition shadow-lg hover:shadow-indigo-500/30 active:scale-[0.98];
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 45%, #dc2626 100%);
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  box-shadow: 0 4px 18px rgba(234, 88, 12, 0.35);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f97316 45%, #ef4444 100%);
+  box-shadow: 0 6px 26px rgba(249, 115, 22, 0.55);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
 }
 
 .btn-secondary {
-  @apply bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2 rounded-xl font-medium transition active:scale-[0.98];
+  @apply bg-stone-900/90 hover:bg-stone-800 text-amber-100 border border-orange-500/20 px-4 py-2 rounded-xl font-medium transition active:scale-[0.98];
 }

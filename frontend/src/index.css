@@ -5,8 +5,8 @@
 :root {
   color-scheme: dark;
   font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  color: #f6f7f2;
-  background: #101817;
+  color: #fff7ed;
+  background: #070302;
 }
 
 html, body, #root {
@@ -16,6 +16,6 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: #101817;
-  color: #f6f7f2;
+  background: #070302;
+  color: #fff7ed;
 }

@@ -58,12 +58,12 @@ const KnowledgeBaseViewer: React.FC = () => {
     <div className="space-y-6">
       {/* Header Glass Panel */}
       <div className="glass-panel border border-white/[0.08] rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-orange-500/20 via-red-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-indigo-400 border border-indigo-500/30">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-orange-400 border border-orange-500/30">
                 <Database size={22} />
               </div>
               <h1 className="text-2xl font-bold text-white tracking-tight">Verified Product & Service Knowledge Base</h1>
