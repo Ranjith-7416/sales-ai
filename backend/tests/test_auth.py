@@ -177,13 +177,38 @@ def test_login_character_variant_and_reset_password():
     assert login_variant.status_code == 200
     assert "access_token" in login_variant.json()
 
-    # Reset password
+    # Request OTP via forgot-password
+    forgot_res = client.post(
+        "/api/auth/forgot-password",
+        json={"email": email},
+    )
+    assert forgot_res.status_code == 200
+    forgot_data = forgot_res.json()
+    assert forgot_data["success"] is True
+    otp_code = forgot_data.get("dev_otp")
+    assert otp_code is not None
+
+    # Test invalid OTP rejected
+    bad_reset = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": "000000", "new_password": "NewSecretPassword99!"},
+    )
+    assert bad_reset.status_code == 400
+
+    # Reset password with valid OTP
     reset_res = client.post(
         "/api/auth/reset-password",
-        json={"email": email, "new_password": "NewSecretPassword99!"},
+        json={"email": email, "otp_code": otp_code, "new_password": "NewSecretPassword99!"},
     )
     assert reset_res.status_code == 200
     assert "access_token" in reset_res.json()
+
+    # Verify code cannot be reused
+    reused_reset = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp_code, "new_password": "AnotherPassword123!"},
+    )
+    assert reused_reset.status_code == 400
 
     # Login with new password
     new_login = client.post(
@@ -191,5 +216,14 @@ def test_login_character_variant_and_reset_password():
         json={"email": email, "password": "NewSecretPassword99!"},
     )
     assert new_login.status_code == 200
+
+
+def test_forgot_password_nonexistent_account():
+    """Verify forgot-password returns 404 for unknown email."""
+    res = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "nobody_exists_12345@example.com"},
+    )
+    assert res.status_code == 404
 
 

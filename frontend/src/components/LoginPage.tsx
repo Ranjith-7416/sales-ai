@@ -21,16 +21,20 @@ type AuthMode = 'login' | 'register' | 'reset';
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, register, resetPassword, isAuthenticated, loading: authLoading } = useAuth();
+  const { login, register, requestPasswordResetOtp, resetPassword, isAuthenticated, loading: authLoading } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
-  
+  const [resetStep, setResetStep] = useState<'request' | 'verify'>('request');
+  const [otpCode, setOtpCode] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
+
   // Form fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -47,12 +51,24 @@ export const LoginPage: React.FC = () => {
     }
   }, [isAuthenticated, authLoading, navigate, destination]);
 
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
   const handleModeSwitch = (newMode: AuthMode) => {
     setMode(newMode);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsExistingAccount(false);
     setConfirmPassword('');
+    setOtpCode('');
+    setResetStep('request');
+    setDevOtpHint(null);
   };
 
   // Real-time trimmed values
@@ -60,6 +76,34 @@ export const LoginPage: React.FC = () => {
   const cleanConfirm = confirmPassword.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim();
   const isMatch = cleanPassword.length > 0 && cleanPassword === cleanConfirm;
   const isMismatch = cleanConfirm.length > 0 && cleanPassword !== cleanConfirm;
+
+  const handleRequestOtp = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your work email address to receive a verification code.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await requestPasswordResetOtp(cleanEmail);
+      setResetStep('verify');
+      setResendCooldown(30);
+      setSuccessMessage(res.message || `A 6-digit verification code was sent to ${cleanEmail}.`);
+      if (res.dev_otp) {
+        setDevOtpHint(res.dev_otp);
+      }
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.detail ||
+        err.message ||
+        'Failed to send verification code. Please check your email address.';
+      setErrorMessage(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,8 +113,14 @@ export const LoginPage: React.FC = () => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanEmail || !cleanPassword) {
-      setErrorMessage('Please provide both email and password.');
+    // If requesting OTP in reset mode step 1
+    if (mode === 'reset' && resetStep === 'request') {
+      await handleRequestOtp();
+      return;
+    }
+
+    if (!cleanEmail) {
+      setErrorMessage('Please provide your work email.');
       return;
     }
 
@@ -110,8 +160,12 @@ export const LoginPage: React.FC = () => {
       } finally {
         setSubmitting(false);
       }
-    } else if (mode === 'reset') {
-      // Password reset mode
+    } else if (mode === 'reset' && resetStep === 'verify') {
+      const cleanOtp = otpCode.trim();
+      if (!cleanOtp || cleanOtp.length < 4) {
+        setErrorMessage('Please enter the 6-digit verification code sent to your email.');
+        return;
+      }
       if (cleanPassword.length < 6) {
         setErrorMessage('New password must be at least 6 characters long.');
         return;
@@ -125,8 +179,8 @@ export const LoginPage: React.FC = () => {
 
       setSubmitting(true);
       try {
-        await resetPassword(cleanEmail, cleanPassword);
-        setSuccessMessage('Password updated successfully! Entering workspace...');
+        await resetPassword(cleanEmail, cleanOtp, cleanPassword);
+        setSuccessMessage('Password verified and updated successfully! Entering workspace...');
         setTimeout(() => {
           navigate(destination, { replace: true });
         }, 800);
@@ -134,13 +188,17 @@ export const LoginPage: React.FC = () => {
         const msg =
           err.response?.data?.detail ||
           err.message ||
-          'Failed to reset password. Please verify your email.';
+          'Failed to reset password. Please check your verification code.';
         setErrorMessage(msg);
       } finally {
         setSubmitting(false);
       }
     } else {
       // Login mode
+      if (!cleanPassword) {
+        setErrorMessage('Please enter your password.');
+        return;
+      }
       setSubmitting(true);
       try {
         await login(cleanEmail, cleanPassword);
@@ -184,7 +242,9 @@ export const LoginPage: React.FC = () => {
                 ? 'Sign in to access your enterprise deal intelligence workspace'
                 : mode === 'register'
                 ? 'Create an account to start qualifying leads and closing deals'
-                : 'Reset your account password to regain workspace access'}
+                : resetStep === 'request'
+                ? 'Enter your work email to receive a secure 6-digit verification code'
+                : 'Enter your 6-digit verification code and choose a new password'}
             </p>
           </div>
 
@@ -196,7 +256,7 @@ export const LoginPage: React.FC = () => {
                 onClick={() => handleModeSwitch('login')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   mode === 'login'
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/30'
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-white shadow-md shadow-orange-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
@@ -207,7 +267,7 @@ export const LoginPage: React.FC = () => {
                 onClick={() => handleModeSwitch('register')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   mode === 'register'
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/30'
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-white shadow-md shadow-orange-500/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
@@ -216,8 +276,8 @@ export const LoginPage: React.FC = () => {
             </div>
           ) : (
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
-                <KeyRound size={14} /> Password Reset
+              <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
+                <KeyRound size={14} /> Password Reset {resetStep === 'verify' ? '• Step 2 of 2' : '• Step 1 of 2'}
               </span>
               <button
                 type="button"
@@ -278,85 +338,153 @@ export const LoginPage: React.FC = () => {
                     autoCorrect="off"
                     spellCheck={false}
                     required={mode === 'register'}
-                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
                   />
                 </div>
               </div>
             )}
 
-            <div>
-              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                Work Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Mail size={15} />
+            {/* Email Field */}
+            {mode === 'reset' && resetStep === 'verify' ? (
+              <div className="p-3 bg-stone-900/80 border border-orange-500/20 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-stone-300">
+                  <Mail size={14} className="text-orange-400 shrink-0" />
+                  <span className="font-mono text-white">{email}</span>
                 </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  required
-                  className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-300">
-                  {mode === 'register' ? 'Create Password' : mode === 'reset' ? 'New Password' : 'Password'}
-                </label>
-                {mode === 'login' && (
-                  <button
-                    type="button"
-                    onClick={() => handleModeSwitch('reset')}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 transition cursor-pointer"
-                  >
-                    Forgot password?
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                  <Lock size={15} />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  autoComplete={mode === 'register' || mode === 'reset' ? 'new-password' : 'current-password'}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  required
-                  className={`w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition ${
-                    showPassword ? 'font-mono tracking-wider' : ''
-                  }`}
-                />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
-                  title={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => {
+                    setResetStep('request');
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
                 >
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  Change Email
                 </button>
               </div>
-              {(mode === 'register' || mode === 'reset') && (
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  Must be at least 6 characters {password.length > 0 && `(${password.length} entered)`}
-                </span>
-              )}
-            </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                  Work Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Mail size={15} />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
+                  />
+                </div>
+              </div>
+            )}
 
-            {(mode === 'register' || mode === 'reset') && (
+            {/* OTP Verification Code (Step 2 of reset mode) */}
+            {mode === 'reset' && resetStep === 'verify' && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    6-Digit Verification Code
+                  </label>
+                  <span className="text-[11px] text-amber-400/90 font-medium">
+                    Check your email inbox
+                  </span>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-amber-400">
+                    <KeyRound size={15} />
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    autoComplete="one-time-code"
+                    required
+                    className="w-full bg-stone-900/90 border border-orange-500/40 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-mono tracking-widest text-center text-white placeholder-stone-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
+                  />
+                </div>
+                {devOtpHint && (
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-lg">
+                    <span>Dev Code: <strong className="font-mono text-amber-200">{devOtpHint}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => setOtpCode(devOtpHint)}
+                      className="text-amber-400 underline hover:text-amber-300 font-semibold cursor-pointer"
+                    >
+                      Auto-fill
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Password Field (Shown in login, register, or verify step of reset) */}
+            {(mode === 'login' || mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    {mode === 'register' ? 'Create Password' : mode === 'reset' ? 'New Password' : 'Password'}
+                  </label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => handleModeSwitch('reset')}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 transition cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock size={15} />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    autoComplete={mode === 'register' || mode === 'reset' ? 'new-password' : 'current-password'}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    className={`w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition ${
+                      showPassword ? 'font-mono tracking-wider' : ''
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {(mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Must be at least 6 characters {password.length > 0 && `(${password.length} entered)`}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Confirm Password Field */}
+            {(mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
               <div>
                 <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                   Confirm Password
@@ -374,7 +502,7 @@ export const LoginPage: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
-                    required={mode === 'register' || mode === 'reset'}
+                    required
                     className={`w-full bg-slate-800/80 border rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition ${
                       showConfirmPassword ? 'font-mono tracking-wider' : ''
                     } ${
@@ -382,7 +510,7 @@ export const LoginPage: React.FC = () => {
                         ? 'border-emerald-500/50 focus:border-emerald-500'
                         : isMismatch
                         ? 'border-amber-500/50 focus:border-amber-500'
-                        : 'border-white/[0.1] focus:border-indigo-500'
+                        : 'border-white/[0.1] focus:border-orange-500'
                     }`}
                   />
                   <button
@@ -416,7 +544,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full mt-2 py-3 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 shadow-lg shadow-indigo-500/25 tracking-wide"
+              className="w-full mt-2 py-3 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 hover:from-amber-400 hover:to-red-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 shadow-lg shadow-orange-500/25 tracking-wide"
             >
               {submitting ? (
                 <>
@@ -424,7 +552,9 @@ export const LoginPage: React.FC = () => {
                   {mode === 'register'
                     ? 'Creating Account...'
                     : mode === 'reset'
-                    ? 'Updating Password...'
+                    ? resetStep === 'request'
+                      ? 'Sending Verification Code...'
+                      : 'Verifying & Updating...'
                     : 'Authenticating...'}
                 </>
               ) : (
@@ -432,12 +562,28 @@ export const LoginPage: React.FC = () => {
                   {mode === 'register'
                     ? 'Create Account & Sign In'
                     : mode === 'reset'
-                    ? 'Update Password & Sign In'
+                    ? resetStep === 'request'
+                      ? 'Send Verification Code'
+                      : 'Verify Code & Reset Password'
                     : 'Sign In to Workspace'}
                   <ArrowRight size={15} />
                 </>
               )}
             </button>
+
+            {mode === 'reset' && resetStep === 'verify' && (
+              <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
+                <span>Didn't receive the email?</span>
+                <button
+                  type="button"
+                  disabled={submitting || resendCooldown > 0}
+                  onClick={handleRequestOtp}
+                  className="text-amber-400 hover:text-amber-300 disabled:text-slate-500 font-semibold cursor-pointer underline-offset-4 hover:underline transition"
+                >
+                  {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : 'Resend Code'}
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Mode Switch Footer */}

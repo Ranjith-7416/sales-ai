@@ -501,3 +501,136 @@ def dispatch_proposal_email(
         }
 
 
+def send_password_reset_otp_email(recipient_email: str, otp_code: str) -> dict:
+    """
+    Send a 6-digit verification code for password reset via SMTP.
+    Falls back gracefully to logger in local development when SMTP is unconfigured.
+    """
+    subject = f"Your Sales AI Password Reset Code: {otp_code}"
+
+    text_body = f"""Sales AI Account Security
+
+Your verification code is: {otp_code}
+
+This code will expire in 10 minutes. Enter this code on the password reset screen to set your new password.
+
+If you did not request a password reset, please ignore this message. Your account remains secure and no changes will be made.
+
+--
+Sales AI Security Team
+"""
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sales AI Verification Code</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0c0a09; margin: 0; padding: 24px; color: #f5f5f4;">
+  <div style="max-width: 520px; margin: 0 auto; background: #1c1917; border-radius: 16px; border: 1px solid rgba(249, 115, 22, 0.25); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div style="background: linear-gradient(135deg, #ea580c, #dc2626); padding: 24px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">Sales AI Account Security</h1>
+    </div>
+    <div style="padding: 28px 24px;">
+      <p style="margin-top: 0; font-size: 15px; line-height: 1.6; color: #d6d3d1;">
+        We received a request to reset the password for your Sales AI account. Use the 6-digit verification code below to complete your reset:
+      </p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <div style="display: inline-block; background: #292524; border: 2px dashed #f97316; border-radius: 12px; padding: 16px 32px;">
+          <span style="font-family: monospace, Consolas, Courier; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #fb923c;">
+            {otp_code}
+          </span>
+        </div>
+        <p style="font-size: 12px; color: #a8a29e; margin-top: 8px;">Valid for 10 minutes</p>
+      </div>
+
+      <p style="font-size: 13px; line-height: 1.5; color: #a8a29e; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
+        <strong>Security Notice:</strong> If you did not request this code, you can safely ignore this email. No password changes will occur without this verification code.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Check if SMTP is configured
+    if not settings.is_smtp_configured():
+        logger.warning(
+            "[DEV / LOCAL OTP] SMTP is not configured. Password reset code for %s is: %s",
+            recipient_email,
+            otp_code,
+        )
+        return {
+            "success": True,
+            "provider": "dev_console",
+            "status": "logged_to_console",
+            "delivery_mode": "dev_fallback",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Verification code generated (development fallback): {otp_code}",
+            "otp_code": otp_code,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    # Attempt live SMTP dispatch
+    try:
+        from_user = settings.SMTP_USER.strip()
+        from_address = f"Sales AI Security <{from_user}>"
+
+        domain = settings.SMTP_HOST
+        if "." in domain:
+            domain_parts = domain.split(".")
+            domain = ".".join(domain_parts[-2:])
+        message_id = make_msgid(domain=domain)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_address
+        msg["To"] = recipient_email
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = message_id
+
+        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        if settings.SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+        else:
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
+            server.ehlo()
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+                server.ehlo()
+
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+
+        logger.info("Password reset OTP email sent successfully to %s", recipient_email)
+        return {
+            "success": True,
+            "provider": "gmail_smtp",
+            "status": "sent",
+            "delivery_mode": "smtp_live",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": "Verification code sent to email inbox",
+            "message_id": message_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as exc:
+        logger.error("Failed to send OTP email via SMTP to %s: %s", recipient_email, str(exc))
+        return {
+            "success": True,
+            "provider": "smtp_fallback_console",
+            "status": "sent_with_warning",
+            "delivery_mode": "dev_fallback",
+            "recipient": recipient_email,
+            "subject": subject,
+            "message": f"Verification code logged to console (SMTP connection warning: {str(exc)})",
+            "otp_code": otp_code,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
+

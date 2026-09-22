@@ -9,7 +9,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  resetPassword: (email: string, password: string) => Promise<void>;
+  requestPasswordResetOtp: (email: string) => Promise<{ success: boolean; message: string; email: string; dev_otp?: string }>;
+  resetPassword: (email: string, otpCode: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -108,9 +109,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     authClient.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
   }, []);
 
-  const resetPassword = useCallback(async (email: string, password: string) => {
+  const requestPasswordResetOtp = useCallback(async (email: string) => {
+    const res = await authClient.post('/auth/forgot-password', { email });
+    return res.data;
+  }, []);
+
+  const resetPassword = useCallback(async (email: string, otpCode: string, password: string) => {
     const res = await authClient.post<LoginResponse>('/auth/reset-password', {
       email,
+      otp_code: otpCode,
       new_password: password,
     });
 
@@ -145,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!token,
         login,
         register,
+        requestPasswordResetOtp,
         resetPassword,
         logout,
       }}
