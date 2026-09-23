@@ -155,9 +155,12 @@ def test_customer_registration_and_login():
     assert bad_login.status_code == 401
 
 
-def test_login_character_variant_and_reset_password():
+def test_login_character_variant_and_reset_password(monkeypatch):
     """Verify single/double character variant (e.g. Ranjiith <-> Ranjith) and reset-password endpoint."""
     import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)
+
     email = f"variant_{uuid.uuid4().hex[:8]}@example.com"
     registered_pass = "Ranjith_37"
     variant_pass = "Ranjiith_37"
@@ -185,6 +188,7 @@ def test_login_character_variant_and_reset_password():
     assert forgot_res.status_code == 200
     forgot_data = forgot_res.json()
     assert forgot_data["success"] is True
+    assert "If an account exists" in forgot_data["message"]
     otp_code = forgot_data.get("dev_otp")
     assert otp_code is not None
 
@@ -194,6 +198,7 @@ def test_login_character_variant_and_reset_password():
         json={"email": email, "otp_code": "000000", "new_password": "NewSecretPassword99!"},
     )
     assert bad_reset.status_code == 400
+    assert "Invalid verification code" in bad_reset.json()["detail"]
 
     # Reset password with valid OTP
     reset_res = client.post(
@@ -218,12 +223,219 @@ def test_login_character_variant_and_reset_password():
     assert new_login.status_code == 200
 
 
-def test_forgot_password_nonexistent_account():
-    """Verify forgot-password returns 404 for unknown email."""
+def test_forgot_password_generic_response_no_enumeration(monkeypatch):
+    """Verify forgot-password returns identical 200 generic responses for both existing and unknown emails."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)
+
+    existing_email = f"user_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Alice Bob", "email": existing_email, "password": "Password123!"},
+    )
+
+    # 1. Existing account
+    res_existing = client.post(
+        "/api/auth/forgot-password",
+        json={"email": existing_email},
+    )
+    assert res_existing.status_code == 200
+    assert "If an account exists" in res_existing.json()["message"]
+    assert res_existing.json()["dev_otp"] is not None
+
+    # 2. Non-existent account (returns same 200 message; dev_otp is strictly None)
+    unknown_email = f"unknown_{uuid.uuid4().hex[:8]}@example.com"
+    res_unknown = client.post(
+        "/api/auth/forgot-password",
+        json={"email": unknown_email},
+    )
+    assert res_unknown.status_code == 200
+    assert res_unknown.json()["message"] == res_existing.json()["message"]
+    assert res_unknown.json()["dev_otp"] is None
+
+
+def test_dev_otp_unavailable_in_production(monkeypatch):
+    """Verify dev_otp is strictly omitted in production environments."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)  # Even if flag is set, production blocks it
+
+    email = f"prod_test_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Prod User", "email": email, "password": "Password123!"},
+    )
+
     res = client.post(
         "/api/auth/forgot-password",
-        json={"email": "nobody_exists_12345@example.com"},
+        json={"email": email},
     )
-    assert res.status_code == 404
+    assert res.status_code == 200
+    assert res.json().get("dev_otp") is None
+
+
+def test_dev_otp_unavailable_when_flag_disabled(monkeypatch):
+    """Verify dev_otp is omitted when ENABLE_DEV_OTP is False in development."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", False)
+
+    email = f"dev_disabled_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Dev User", "email": email, "password": "Password123!"},
+    )
+
+    res = client.post(
+        "/api/auth/forgot-password",
+        json={"email": email},
+    )
+    assert res.status_code == 200
+    assert res.json().get("dev_otp") is None
+
+
+def test_reset_password_with_expired_otp_fails(monkeypatch):
+    """Verify expired OTP code is rejected."""
+    import uuid
+    from datetime import datetime, timedelta
+    from app.database import SessionLocal
+    from app.models import PasswordResetToken
+    from app.api.auth import hash_otp_code
+
+    email = f"expired_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Expired Test", "email": email, "password": "Password123!"},
+    )
+
+    otp_code = "654321"
+    db = SessionLocal()
+    try:
+        token = PasswordResetToken(
+            email=email,
+            otp_code=hash_otp_code(otp_code, email),
+            expires_at=datetime.utcnow() - timedelta(minutes=1),  # Expired
+            is_used=False,
+            attempts=0,
+        )
+        db.add(token)
+        db.commit()
+    finally:
+        db.close()
+
+    res = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp_code, "new_password": "NewPassword123!"},
+    )
+    assert res.status_code == 400
+    assert "expired" in res.json()["detail"].lower()
+
+
+def test_reset_password_too_many_attempts_locks_otp(monkeypatch):
+    """Verify 5 incorrect attempts invalidate the OTP."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)
+
+    email = f"bruteforce_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Brute Test", "email": email, "password": "Password123!"},
+    )
+
+    forgot_res = client.post("/api/auth/forgot-password", json={"email": email})
+    correct_otp = forgot_res.json()["dev_otp"]
+
+    # 4 invalid attempts
+    for i in range(4):
+        bad_res = client.post(
+            "/api/auth/reset-password",
+            json={"email": email, "otp_code": f"00000{i}", "new_password": "NewPassword123!"},
+        )
+        assert bad_res.status_code == 400
+        assert "Invalid verification code" in bad_res.json()["detail"]
+
+    # 5th invalid attempt invalidates token
+    bad_res_5 = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": "000005", "new_password": "NewPassword123!"},
+    )
+    assert bad_res_5.status_code == 400
+
+    # 6th attempt (even with correct OTP) is now rejected because token is locked
+    locked_res = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": correct_otp, "new_password": "NewPassword123!"},
+    )
+    assert locked_res.status_code == 400
+    assert "invalidated" in locked_res.json()["detail"].lower() or "no active" in locked_res.json()["detail"].lower()
+
+
+def test_request_new_otp_invalidates_previous_otps(monkeypatch):
+    """Verify requesting a new OTP invalidates the previous unexpired OTP."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)
+
+    email = f"superseded_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Superseded Test", "email": email, "password": "Password123!"},
+    )
+
+    # Request OTP 1
+    res1 = client.post("/api/auth/forgot-password", json={"email": email})
+    otp1 = res1.json()["dev_otp"]
+
+    # Request OTP 2
+    res2 = client.post("/api/auth/forgot-password", json={"email": email})
+    otp2 = res2.json()["dev_otp"]
+
+    # Attempting to use OTP 1 fails
+    res_otp1 = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp1, "new_password": "NewPassword123!"},
+    )
+    assert res_otp1.status_code == 400
+
+    # Using OTP 2 succeeds
+    res_otp2 = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp2, "new_password": "NewPassword123!"},
+    )
+    assert res_otp2.status_code == 200
+
+
+def test_reset_password_weak_password_rejected(monkeypatch):
+    """Verify backend enforces minimum password length during reset."""
+    import uuid
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "ENABLE_DEV_OTP", True)
+
+    email = f"weak_pass_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Weak Pass User", "email": email, "password": "Password123!"},
+    )
+
+    forgot_res = client.post("/api/auth/forgot-password", json={"email": email})
+    otp_code = forgot_res.json()["dev_otp"]
+
+    # 1. Pydantic schema validation rejects length < 6 (HTTP 422)
+    res_short = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp_code, "new_password": "123"},
+    )
+    assert res_short.status_code in (400, 422)
+
+    # 2. Custom backend validator rejects whitespace padding (HTTP 400)
+    res_whitespace = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "otp_code": otp_code, "new_password": "   123   "},
+    )
+    assert res_whitespace.status_code == 400
+    assert "at least 6 characters" in res_whitespace.json()["detail"]
+
 
 

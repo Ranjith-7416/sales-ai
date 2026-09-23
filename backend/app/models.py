@@ -185,7 +185,7 @@ class PasswordResetToken(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String(320), nullable=False, index=True)
-    otp_code = Column(String(10), nullable=False)
+    otp_code = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False, nullable=False)
     attempts = Column(Integer, default=0, nullable=False)

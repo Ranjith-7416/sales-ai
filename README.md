@@ -21,10 +21,10 @@ An end-to-end, enterprise-grade **Agentic AI Sales Lead Qualification & Proposal
 | **Health Check Endpoint** | [https://sales-ai-etew.onrender.com/health](https://sales-ai-etew.onrender.com/health) | Live system status & version monitor |
 | **GitHub Repository** | [https://github.com/Ranjith-7416/sales-ai](https://github.com/Ranjith-7416/sales-ai) | Complete source code, automated test suites, and Docker configs |
 
-### 🔑 Default Demo Credentials
-- **Email:** `admin@salesai.com`
-- **Password:** `salesai123`
-- *New user registration and secure 2-step OTP password reset are also fully supported.*
+### 🔑 Access & Authentication
+- **Default Admin Account:** Configured via `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables in your deployment environment.
+- **Account Registration:** Self-service registration is available directly on the login page.
+- **Password Reset:** Secured by server-side cryptographic 6-digit OTP verification delivered via SMTP.
 
 ---
 

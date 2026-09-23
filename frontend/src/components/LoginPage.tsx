@@ -18,6 +18,24 @@ import {
 
 type AuthMode = 'login' | 'register' | 'reset';
 
+// Gated strictly to development builds. In production, Vite evaluates import.meta.env.DEV as false
+// and Rollup dead-code elimination strips this component and its text entirely from the output bundle.
+let DevOtpHelper: React.FC<{ otp: string; onAutoFill: (val: string) => void }> | null = null;
+if (import.meta.env.DEV) {
+  DevOtpHelper = ({ otp, onAutoFill }) => (
+    <div className="mt-1.5 flex items-center justify-between text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-lg">
+      <span>Dev Code: <strong className="font-mono text-amber-200">{otp}</strong></span>
+      <button
+        type="button"
+        onClick={() => onAutoFill(otp)}
+        className="text-amber-400 underline hover:text-amber-300 font-semibold cursor-pointer"
+      >
+        Auto-fill
+      </button>
+    </div>
+  );
+}
+
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -91,7 +109,7 @@ export const LoginPage: React.FC = () => {
       setResetStep('verify');
       setResendCooldown(30);
       setSuccessMessage(res.message || `A 6-digit verification code was sent to ${cleanEmail}.`);
-      if (res.dev_otp) {
+      if (import.meta.env.DEV && res.dev_otp) {
         setDevOtpHint(res.dev_otp);
       }
     } catch (err: any) {
@@ -416,17 +434,8 @@ export const LoginPage: React.FC = () => {
                     className="w-full bg-stone-900/90 border border-orange-500/40 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-mono tracking-widest text-center text-white placeholder-stone-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
                   />
                 </div>
-                {devOtpHint && (
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-lg">
-                    <span>Dev Code: <strong className="font-mono text-amber-200">{devOtpHint}</strong></span>
-                    <button
-                      type="button"
-                      onClick={() => setOtpCode(devOtpHint)}
-                      className="text-amber-400 underline hover:text-amber-300 font-semibold cursor-pointer"
-                    >
-                      Auto-fill
-                    </button>
-                  </div>
+                {DevOtpHelper && devOtpHint && (
+                  <DevOtpHelper otp={devOtpHint} onAutoFill={setOtpCode} />
                 )}
               </div>
             )}

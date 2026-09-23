@@ -555,20 +555,19 @@ Sales AI Security Team
 
     # Check if SMTP is configured
     if not settings.is_smtp_configured():
-        logger.warning(
-            "[DEV / LOCAL OTP] SMTP is not configured. Password reset code for %s is: %s",
-            recipient_email,
-            otp_code,
-        )
+        if settings.ENVIRONMENT.lower() != "production" and getattr(settings, "ENABLE_DEV_OTP", False):
+            logger.info("SMTP unconfigured in development mode for %s; dev mode active", recipient_email)
+        else:
+            logger.warning("SMTP unconfigured: Password reset email could not be dispatched via SMTP for %s", recipient_email)
+
         return {
             "success": True,
-            "provider": "dev_console",
-            "status": "logged_to_console",
-            "delivery_mode": "dev_fallback",
+            "provider": "dev_console" if settings.ENVIRONMENT.lower() != "production" else "unconfigured_smtp",
+            "status": "queued" if settings.ENVIRONMENT.lower() == "production" else "dev_fallback",
+            "delivery_mode": "dev_fallback" if settings.ENVIRONMENT.lower() != "production" else "unconfigured_smtp",
             "recipient": recipient_email,
             "subject": subject,
-            "message": f"Verification code generated (development fallback): {otp_code}",
-            "otp_code": otp_code,
+            "message": "Password reset verification code processed.",
             "timestamp": datetime.utcnow().isoformat(),
         }
 

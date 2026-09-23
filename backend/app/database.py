@@ -49,6 +49,8 @@ def _ensure_performance_indexes(bind_engine):
         "CREATE INDEX IF NOT EXISTS ix_leads_email ON leads (email)",
         "CREATE INDEX IF NOT EXISTS ix_proposals_lead_created ON proposals (lead_id, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS ix_proposals_status ON proposals (status)",
+        "CREATE INDEX IF NOT EXISTS ix_pwd_tokens_email ON password_reset_tokens (email)",
+        "ALTER TABLE password_reset_tokens ALTER COLUMN otp_code TYPE VARCHAR(255)",
     ]
     with bind_engine.connect() as conn:
         for stmt in index_statements:
@@ -57,7 +59,7 @@ def _ensure_performance_indexes(bind_engine):
                 conn.execute(text(stmt))
                 conn.commit()
             except Exception as e:
-                logger.debug(f"Index creation note ({stmt}): {e}")
+                logger.debug(f"Schema maintenance note ({stmt}): {e}")
 
 
 def init_db():

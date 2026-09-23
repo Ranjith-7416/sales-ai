@@ -8,6 +8,7 @@ from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import bcrypt
+import hashlib
 import secrets
 import logging
 import socket
@@ -16,6 +17,7 @@ from app.config import settings
 from app.database import get_db
 from app.models import User, PasswordResetToken
 from app.services.email_service import send_password_reset_otp_email
+from app.security import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,6 @@ def verify_email_domain_exists(email: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-
     """Hash password using bcrypt (truncating to 72 bytes to adhere to bcrypt max)."""
     pwd_bytes = password.encode("utf-8")[:72]
     salt = bcrypt.gensalt()
@@ -60,6 +61,56 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(pwd_bytes, hashed_password.encode("utf-8"))
     except Exception:
         return False
+
+
+def validate_password_strength(password: str) -> None:
+    """Enforce backend password length and complexity requirements."""
+    clean = password.replace("\u200B", "").replace("\uFEFF", "").strip()
+    if len(clean) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long.",
+        )
+    if len(password) > 128:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must not exceed 128 characters.",
+        )
+
+
+def hash_otp_code(otp_code: str, email: str) -> str:
+    """
+    Compute salted SHA-256 hash of the 6-digit OTP using server SECRET_KEY and normalized email.
+    Plaintext OTP values are never stored in the database.
+    """
+    clean_otp = str(otp_code).strip()
+    salt = email.strip().lower()
+    payload = f"{settings.SECRET_KEY}:{salt}:{clean_otp}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_otp_code(provided_code: str, stored_hash_or_code: str, email: str) -> bool:
+    """
+    Verify provided OTP against stored hash (or legacy plain token) using constant-time comparison.
+    """
+    clean_code = str(provided_code).strip()
+    expected_hash = hash_otp_code(clean_code, email)
+    if secrets.compare_digest(expected_hash, stored_hash_or_code):
+        return True
+    # Backward compatibility with unexpired plain tokens during migration window
+    if secrets.compare_digest(clean_code, stored_hash_or_code):
+        return True
+    return False
+
+
+def is_dev_otp_enabled() -> bool:
+    """
+    Developer OTP feature is strictly disabled in production environments.
+    Only active when explicitly configured via ENABLE_DEV_OTP in non-production.
+    """
+    if settings.ENVIRONMENT.lower() == "production":
+        return False
+    return getattr(settings, "ENABLE_DEV_OTP", False)
 
 
 class RegisterRequest(BaseModel):
@@ -162,6 +213,8 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The email domain does not exist or cannot receive mail. Please use a valid email address.",
         )
+
+    validate_password_strength(payload.password)
 
     # Check if user with this email already exists
     existing_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
@@ -317,11 +370,19 @@ async def logout():
     return {"message": "Logged out successfully"}
 
 
-@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    dependencies=[Depends(rate_limit("RATE_LIMIT_FORGOT_PASSWORD"))],
+)
 async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
-    Initiate password reset: verify account exists, generate a cryptographically
-    secure 6-digit OTP code with 10-minute expiry, and dispatch to user's email.
+    Initiate password reset:
+    - Protects against user enumeration by returning identical generic message.
+    - Generates cryptographically secure 6-digit OTP code (10-minute expiry).
+    - Stores salted SHA-256 hash of OTP in database (never plaintext).
+    - Dispatches OTP to user's email via SMTP.
+    - Strictly omits dev_otp in production environments.
     """
     normalized_email = payload.email.strip().lower()
     if not normalized_email:
@@ -330,17 +391,16 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
             detail="Email address is required.",
         )
 
-    db_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with this email address. Please create an account.",
-        )
+    generic_message = "If an account exists for this email, a verification code has been sent."
 
-    if not db_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated.",
+    db_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
+    if not db_user or not db_user.is_active:
+        logger.info("Security Event: Password reset requested for unregistered or inactive email")
+        return ForgotPasswordResponse(
+            success=True,
+            message=generic_message,
+            email=normalized_email,
+            dev_otp=None,
         )
 
     # Invalidate any existing unused tokens for this email to prevent replay
@@ -349,13 +409,14 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
         PasswordResetToken.is_used == False,
     ).update({"is_used": True}, synchronize_session=False)
 
-    # Generate 6-digit numeric OTP
+    # Generate 6-digit numeric OTP (100000 - 999999)
     otp_code = f"{secrets.randbelow(900000) + 100000}"
     expires_at = datetime.utcnow() + timedelta(minutes=10)
+    hashed_otp = hash_otp_code(otp_code, normalized_email)
 
     token_record = PasswordResetToken(
         email=normalized_email,
-        otp_code=otp_code,
+        otp_code=hashed_otp,
         expires_at=expires_at,
         is_used=False,
         attempts=0,
@@ -363,51 +424,44 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
     db.add(token_record)
     db.commit()
 
-    # Dispatch email
-    dispatch_res = send_password_reset_otp_email(normalized_email, otp_code)
-    logger.info("Password reset OTP requested for %s [mode: %s]", normalized_email, dispatch_res.get("delivery_mode"))
+    # Dispatch email (does not log OTP)
+    send_password_reset_otp_email(normalized_email, otp_code)
+    logger.info("Security Event: Password reset requested for email: %s", normalized_email)
 
-    # Return dev_otp if in non-production or if SMTP is unconfigured for developer convenience
-    dev_otp = None
-    if settings.ENVIRONMENT.lower() != "production" or not settings.is_smtp_configured():
-        dev_otp = otp_code
+    # Return dev_otp only when explicit development flag is enabled and NOT in production
+    dev_otp = otp_code if is_dev_otp_enabled() else None
 
     return ForgotPasswordResponse(
         success=True,
-        message=f"A 6-digit verification code has been sent to {normalized_email}.",
+        message=generic_message,
         email=normalized_email,
         dev_otp=dev_otp,
     )
 
 
-@router.post("/reset-password", response_model=LoginResponse)
+@router.post(
+    "/reset-password",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit("RATE_LIMIT_RESET_PASSWORD"))],
+)
 async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
     """
-    Verify 6-digit OTP code and reset password.
-    Enforces expiry (10 min), single-use token, and max 5 attempts.
+    Verify 6-digit OTP code against server-side salted hash and reset password.
+    Enforces expiry (10 min), single-use token, max 5 attempts, and backend password strength.
     Returns signed JWT on success.
     """
     normalized_email = payload.email.strip().lower()
     clean_code = payload.otp_code.strip()
     clean_password = payload.new_password.strip()
 
-    if len(clean_password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 6 characters long.",
-        )
+    validate_password_strength(clean_password)
 
     db_user = db.query(User).filter(func.lower(User.email) == normalized_email).first()
-    if not db_user:
+    if not db_user or not db_user.is_active:
+        logger.warning("Security Event: OTP verification failed (account not found or inactive): %s", normalized_email)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found with this email address. Please create an account.",
-        )
-
-    if not db_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code.",
         )
 
     # Find the latest active reset token for this email
@@ -422,6 +476,7 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     )
 
     if not token_record:
+        logger.warning("Security Event: OTP verification failed (no active request): %s", normalized_email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No active password reset request found. Please request a new verification code.",
@@ -431,6 +486,7 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     if token_record.attempts >= 5:
         token_record.is_used = True
         db.commit()
+        logger.warning("Security Event: OTP verification failed (attempts exceeded): %s", normalized_email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Too many invalid attempts. This verification code has been invalidated. Please request a new one.",
@@ -440,28 +496,33 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     if datetime.utcnow() > token_record.expires_at:
         token_record.is_used = True
         db.commit()
+        logger.warning("Security Event: OTP verification failed (token expired): %s", normalized_email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This verification code has expired (valid for 10 minutes). Please request a new one.",
         )
 
-    # Validate OTP code using constant-time comparison
-    if not secrets.compare_digest(clean_code, token_record.otp_code):
+    # Validate OTP code using constant-time hash comparison
+    if not verify_otp_code(clean_code, token_record.otp_code, normalized_email):
         token_record.attempts += 1
         db.commit()
-        remaining = 5 - token_record.attempts
+        logger.warning("Security Event: OTP verification failed for email: %s (attempt %d/5)", normalized_email, token_record.attempts)
+        remaining = max(0, 5 - token_record.attempts)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid verification code. Please check your email and try again ({remaining} attempts remaining).",
         )
 
-    # Mark token used
+    # Mark token used immediately to prevent replay
     token_record.is_used = True
 
     # Update password
     db_user.hashed_password = get_password_hash(clean_password)
     db.commit()
     db.refresh(db_user)
+
+    logger.info("Security Event: OTP verification succeeded for email: %s", normalized_email)
+    logger.info("Security Event: Password successfully changed for email: %s", normalized_email)
 
     expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token_data = {
@@ -471,7 +532,6 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
         "role": db_user.role,
     }
     token = create_access_token(data=token_data, expires_delta=expires_delta)
-    logger.info(f"Password reset successful via verified OTP for user {db_user.email}")
     return LoginResponse(
         access_token=token,
         token_type="bearer",

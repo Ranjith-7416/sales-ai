@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_LEAD_REQUESTS: int = int(os.getenv("RATE_LIMIT_LEAD_REQUESTS", "10"))
     RATE_LIMIT_PROPOSAL_REQUESTS: int = int(os.getenv("RATE_LIMIT_PROPOSAL_REQUESTS", "30"))
     RATE_LIMIT_KB_UPLOADS: int = int(os.getenv("RATE_LIMIT_KB_UPLOADS", "10"))
+    RATE_LIMIT_FORGOT_PASSWORD: int = int(os.getenv("RATE_LIMIT_FORGOT_PASSWORD", "10"))
+    RATE_LIMIT_RESET_PASSWORD: int = int(os.getenv("RATE_LIMIT_RESET_PASSWORD", "15"))
     WEB_SEARCH_TIMEOUT_SECONDS: float = float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "15"))
     LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
     DATABASE_CONNECT_TIMEOUT_SECONDS: int = int(os.getenv("DATABASE_CONNECT_TIMEOUT_SECONDS", "10"))
@@ -108,9 +110,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@salesai.com")
-    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "salesai123")
+    ADMIN_PASSWORD: Optional[str] = os.getenv("ADMIN_PASSWORD") or (
+        "salesai123" if os.getenv("ENVIRONMENT", "development").strip().lower() != "production" else None
+    )
     ADMIN_NAME: str = os.getenv("ADMIN_NAME", "Sales AI Director")
     ADMIN_ROLE: str = os.getenv("ADMIN_ROLE", "admin")
+    ENABLE_DEV_OTP: bool = os.getenv("ENABLE_DEV_OTP", "false").strip().lower() in ("true", "1", "yes")
 
     # Email Delivery Configuration (Gmail SMTP is Primary)
     EMAIL_PROVIDER: str = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
