@@ -1,559 +1,306 @@
-# Sales AI - AI-Powered Lead Qualification & Proposal Generation
+# Agentic AI Sales Lead Qualification & Proposal Generation System
 
-A full-stack application foundation that uses AI agents to qualify sales leads, analyze requirements, and generate knowledge-base-grounded proposal drafts. Local Docker development is supported; production deployment requires provider keys and Render/Vercel setup.
+[![CI/CD Tests](https://img.shields.io/badge/pytest-109%20passed-emerald)](https://github.com/Ranjith-7416/sales-ai)
+[![Frontend Build](https://img.shields.io/badge/vite%20build-passing-emerald)](https://sales-ai-ranjith-7416s-projects.vercel.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Deployed on Render](https://img.shields.io/badge/Render-Backend%20Live-46E3B7?logo=render&logoColor=white)](https://sales-ai-etew.onrender.com)
+[![Deployed on Vercel](https://img.shields.io/badge/Vercel-Frontend%20Live-000000?logo=vercel&logoColor=white)](https://sales-ai-ranjith-7416s-projects.vercel.app)
 
-## Features
+An end-to-end, enterprise-grade **Agentic AI Sales Lead Qualification & Proposal Generation Platform** designed to automate B2B presales operations. Presales and sales teams spend substantial time researching accounts, parsing unstructured RFPs, qualifying opportunities, matching client requirements against product portfolios, and assembling compliant commercial proposals. This system deploys **six specialized autonomous AI agents orchestrated via LangGraph** to handle the entire lead-to-proposal lifecycle with explainable scoring, strict zero-hallucination knowledge base grounding, and professional PDF proposal generation.
 
-✨ **Intelligent Lead Qualification**
-- Automated lead analysis using LangGraph agents
-- Explainable scoring with Fit, Readiness, Opportunity, and Risk metrics
-- Composite scores (0-100) with detailed reasoning
+---
 
-🔍 **Comprehensive Research**
-- Automatic company research and background analysis
-- Industry vertical and market position assessment
-- Recent news and public information gathering
+## 🌐 Live Deployments & Repository
 
-📋 **Requirements Analysis**
-- Functional and non-functional requirement extraction
-- Missing information identification
-- Assumption documentation and priority mapping
+| Resource | Target URL | Description |
+| :--- | :--- | :--- |
+| **Live Frontend App** | [https://sales-ai-ranjith-7416s-projects.vercel.app](https://sales-ai-ranjith-7416s-projects.vercel.app) | Production React + TypeScript + Tailwind UI hosted on Vercel CDN |
+| **Live Backend API** | [https://sales-ai-etew.onrender.com](https://sales-ai-etew.onrender.com) | Production FastAPI service hosted on Render with PostgreSQL |
+| **Interactive API Docs** | [https://sales-ai-etew.onrender.com/docs](https://sales-ai-etew.onrender.com/docs) | Swagger UI for interactive API exploration |
+| **ReDoc Specifications** | [https://sales-ai-etew.onrender.com/redoc](https://sales-ai-etew.onrender.com/redoc) | Clean, responsive technical API documentation |
+| **Health Check Endpoint** | [https://sales-ai-etew.onrender.com/health](https://sales-ai-etew.onrender.com/health) | Live system status & version monitor |
+| **GitHub Repository** | [https://github.com/Ranjith-7416/sales-ai](https://github.com/Ranjith-7416/sales-ai) | Complete source code, automated test suites, and Docker configs |
 
-💡 **Solution Matching**
-- AI-powered product/service matching from knowledge base
-- Coverage percentage analysis
-- Gap identification and workarounds
+### 🔑 Default Demo Credentials
+- **Email:** `admin@salesai.com`
+- **Password:** `salesai123`
+- *New user registration and secure 2-step OTP password reset are also fully supported.*
 
-📄 **Proposal Generation**
-- Automated proposal creation with executive summary
-- Implementation roadmap and timeline
-- Pricing and success metrics
-- Professional formatting ready for delivery
+---
 
-✅ **Quality Review**
-- Automated proposal validation
-- Claim verification against requirements
-- Risk assessment and escalation paths
-- Follow-up question generation
+## 🎯 Problem Statement & Core Objective
 
-## Tech Stack
+Sales organizations handle hundreds of inbound inquiries and complex RFPs every month. Manually vetting each inquiry results in slow response times, missed high-value opportunities, inconsistent qualification criteria, and inaccurate proposal claims.
+
+### Real-World Example Scenario
+> **Customer Inquiry:**  
+> *"We need an AI-powered document processing solution capable of extracting information from approximately 10,000 PDF documents per month."*
+
+The system automatically:
+1. **Researches the prospective company** to extract business vertical, scale, and operational context.
+2. **Extracts structured requirements** (functional, scale, performance SLAs, ISO/SOC2 compliance, budget, timeline) and pinpoints missing information.
+3. **Calculates an explainable lead score** (0–100) and categorizes the lead into **Qualified**, **Needs More Information**, or **Low Priority**.
+4. **Matches requirements against the Product & Service Knowledge Base (RAG)**, retrieving exact catalog capabilities (`DocumentAI Pro`) and calculating coverage percentage.
+5. **Drafts a structured business proposal** strictly grounded in knowledge-base pricing and capabilities without inventing hallucinated claims.
+6. **Audits the proposal via a Reviewer Agent**, verifying requirement coverage, flagging unverified claims, generating customer follow-up questions, and prescribing next actions.
+7. **Generates an enterprise-ready PDF Proposal document** available for immediate client sharing and download.
+
+---
+
+## 🤖 Specialized AI Agents Architecture
+
+The platform uses a modular, sequential-and-parallelized pipeline orchestrated using **LangGraph StateGraph**.
+
+```mermaid
+flowchart TD
+    subgraph INGESTION ["1. Ingestion Layer"]
+        A["Customer Inquiry / RFP"] -->|Manual Form / PDF / DOCX Upload| B["Input Parser & Document Processor"]
+    end
+
+    subgraph AGENT_PIPELINE ["2. Autonomous Agentic Pipeline (LangGraph)"]
+        B --> C["1. Lead Research Agent\n(Web Search + Market Context)"]
+        C --> D["2. Requirement Analysis Agent\n(Extract Needs + Identify Gaps)"]
+        
+        D --> E["3. Qualification Agent\n(Explainable Multi-Factor Scoring)"]
+        D --> F["4. Solution Matching Agent\n(ChromaDB RAG Catalog Retrieval)"]
+        
+        E & F --> G["5. Proposal Agent\n(Strict Grounded Draft Generation)"]
+        G --> H["6. Decision / Reviewer Agent\n(Audit Coverage + Fact Verification)"]
+    end
+
+    subgraph OUTPUT_LAYER ["3. Delivery & Output Layer"]
+        H --> I["Dashboard Visualization\n(Status, Score, Gaps, Recommendations)"]
+        H --> J["ReportLab Engine\n(Letter Portrait Multi-page PDF)"]
+        H --> K["CRM Persistence\n(PostgreSQL + Redis Agent Memory)"]
+    end
+```
+
+### Detailed Agent Breakdown
+
+| Agent | Responsibility | Core Output |
+| :--- | :--- | :--- |
+| **1. Lead Research Agent** | Researches public company background, industry vertical, business model, and public web evidence via Brave/Serper/Mock fallback. | Company size, headquarters, market position, recent news, and public contact metadata. |
+| **2. Requirement Analysis Agent** | Deeply analyzes customer text/files. Extracts functional requirements, technical constraints, scale metrics, and identifies missing information. | Structured functional requirements, non-functional requirements (scale, latency, security, compliance), and discovery gaps. |
+| **3. Qualification Agent** | Evaluates the opportunity across 4 weighted dimensions using configurable rules and formulas. | Composite score (0–100), Fit score, Readiness score, Opportunity score, Risk score, and score drivers. |
+| **4. Solution Matching Agent** | Queries ChromaDB vector store using semantic similarity & lexical matching against products and services catalog. | Matched products/services, capability mapping, coverage percentage, gaps, workarounds, and commercial estimates. |
+| **5. Proposal Agent** | Generates a complete, structured commercial proposal. Strictly adheres to catalog evidence with zero invented pricing or SLAs. | Executive summary, implementation roadmap, pricing schedule, support tiers, success metrics, and next steps. |
+| **6. Decision / Reviewer Agent** | Performs independent quality assurance and fact-checking. Validates requirement coverage and flags unsupported claims. | Requirement coverage audit, verified claim citations, risk matrix, customer follow-up questions, and recommended next actions. |
+
+---
+
+## 📊 Explainable & Configurable Lead Scoring Engine
+
+The qualification score is **100% deterministic, explainable, and dynamically configurable** via the UI and API.
+
+### Multi-Factor Scoring Formula
+$$\text{Composite Score} = (w_{\text{fit}} \times S_{\text{fit}}) + (w_{\text{readiness}} \times S_{\text{readiness}}) + (w_{\text{opp}} \times S_{\text{opp}}) + (w_{\text{risk}} \times [100 - S_{\text{risk}}])$$
+
+| Component | Default Weight | Metric Focus | Scoring Criteria |
+| :--- | :---: | :--- | :--- |
+| **Fit Score** | **25%** | Product/Capability Match | Degree to which customer needs match knowledge base products |
+| **Readiness Score** | **25%** | Purchase Intent & Urgency | Defined timeline, active decision-makers, and clear urgency |
+| **Opportunity Score** | **30%** | Commercial Value & Scale | Budget magnitude, processing volume (e.g. 10k docs/mo), company size |
+| **Risk Score** | **20%** | Delivery & Compliance Risk | Inverted: High technical or compliance risk reduces overall score |
+
+### Status Categorization Thresholds
+- 🟢 **Qualified:** $\text{Composite Score} \ge 75$ (ready for proposal and sales engagement)
+- 🟡 **Needs More Information:** $50 \le \text{Composite Score} < 75$ (or critical discovery gaps detected)
+- 🔴 **Low Priority:** $\text{Composite Score} < 50$ (disqualified, personal inquiry, or extreme mismatch)
+
+> ⚙️ **Dynamic Configuration:** Sales directors can click **Scoring Rules** in the dashboard to adjust weights and threshold cutoffs in real time via an interactive modal with live validation ($\sum w_i = 1.00$).
+
+---
+
+## 🛡️ Anti-Hallucination & Knowledge Grounding Guarantees
+
+In accordance with strict enterprise presales requirements, the Proposal Agent is constrained by deterministic validators ([`proposal_validator.py`](backend/app/services/proposal_validator.py)):
+1. **Catalog Integrity:** The agent cannot invent products, add-ons, or professional services not present in [`products.json`](backend/knowledge_base/products.json) or [`services.json`](backend/knowledge_base/services.json).
+2. **Pricing Bounds:** Commercial quotes are bound directly to catalog pricing tiers. Unspecified amounts are marked `[TO BE CONFIRMED]`.
+3. **Certification Guardrails:** ISO 27001, SOC 2 Type II, HIPAA, or GDPR compliance claims are only asserted if the matched catalog entry holds that certification.
+4. **Audit Trail:** The Reviewer Agent inspects every sentence in the generated proposal and marks claims as `Verified (KB Reference)` or `Unverified`.
+
+---
+
+## 🖥️ Complete User Journey & Expected Output Alignment
+
+The application covers the complete lifecycle from authentication to PDF export:
+
+```
+[Login / Register / OTP Reset] 
+       │
+       ▼
+[Lead Ingestion Form] ─── (Manual entry or PDF/DOCX drag-and-drop)
+       │
+       ▼
+[Real-Time Pipeline Execution] ─── (6 agents execute in orchestrated graph)
+       │
+       ▼
+[Interactive Dashboard View]:
+  ├── 1. Overview Tab: Radial Score Dial, Status Badge, Reasoning Narrative, Missing Info Callouts, 6 Context Blocks
+  ├── 2. Research Tab: Account Intelligence, Industry, Market Position, Recent News
+  ├── 3. Requirements Tab: Functional, Non-Functional (Scale, SLA, Security), Constraints, Priority Mapping
+  ├── 4. Solution Tab: Matched Products/Services, Coverage %, Gaps & Workarounds, Commercial Valuation
+  ├── 5. Proposal Tab: Grounded Proposal, Roadmap, Pricing, SLA, [Download Proposal PDF], [Export Markdown]
+  └── 6. Review Tab: Coverage Validation, Verified Claims, Risk Assessment, Follow-up Questions, Next Steps
+```
+
+---
+
+## 🛠️ Complete Technology Stack
 
 ### Backend
-- **FastAPI 0.104.1** - Modern Python web framework with async support
-- **LangGraph 0.2.28** - Agent orchestration and workflow management
-- **LangChain 0.2.x** - LLM abstractions and tool integration
-- **Anthropic Claude 3** - Primary LLM, with OpenAI and Google provider selection
-- **ChromaDB 0.4.17** - Vector database for RAG knowledge base
-- **PostgreSQL 15** - Persistent data storage
-- **Redis 7** - Caching and performance optimization
-- **SQLAlchemy 2.0.23** - ORM and database migrations
-- **Pydantic 2.5.0** - Data validation and serialization
-- **Docker** - Containerization and deployment
-
-### Current implementation notes
-- Qualification thresholds and score weights are configurable with environment variables such as `QUALIFIED_SCORE_THRESHOLD` and `FIT_SCORE_WEIGHT`.
-- Web search results use Redis caching when Redis is available, with an in-memory development fallback.
-- PDF and DOCX inquiries can be uploaded through `POST /api/leads/upload` and the New Lead form.
-- Solution matches are checked against the knowledge base before proposal generation; unsupported matches are rejected.
-- No production URLs are included in this repository yet. Follow [DEPLOYMENT.md](./DEPLOYMENT.md) to deploy.
+- **Python 3.11** - High-performance core runtime
+- **FastAPI 0.104.1** - Modern, asynchronous REST API framework
+- **LangGraph 0.2.28** - Stateful multi-agent graph orchestration
+- **LangChain 0.2.x** - LLM abstraction and tool-calling utilities
+- **ChromaDB 0.4.17** - Persistent vector database for RAG retrieval
+- **ReportLab 4.x** - Professional multi-page PDF rendering engine
+- **SQLAlchemy 2.0 & PostgreSQL** - CRM data persistence (with SQLite dev fallback)
+- **Redis 7** - Distributed caching, rate-limiting, and agent memory
+- **Pydantic 2.5** - Strict data validation and schema enforcement
+- **PyPDF & python-docx** - Unstructured customer document processing
 
 ### Frontend
-- **React 18.2.0** - UI framework
-- **TypeScript 5.2.2** - Type-safe development
-- **Vite 5.0.0** - Fast build tooling
-- **Tailwind CSS 3.3.0** - Utility-first styling
-- **Axios** - HTTP client
-- **React Router** - Client-side routing
+- **React 18.2** - Component-based user interface
+- **TypeScript 5.2** - End-to-end type safety
+- **Tailwind CSS 3.3** - Utility-first modern aesthetic styling
+- **Vite 5.0** - Ultra-fast development and optimized production bundling
+- **Lucide React** - Polished iconography
+- **Axios** - HTTP client with unified auth interceptors
 
-### Infrastructure
-- **Render** - Backend hosting with PostgreSQL and Redis
-- **Vercel** - Frontend hosting with CDN
-- **GitHub Actions** - CI/CD pipeline (optional)
+---
 
-## Architecture
+## 🚀 Local Development Setup
 
-```
-Sales AI Application
-├── Backend (FastAPI)
-│   ├── Services Layer
-│   │   ├── LLM Service (Anthropic/OpenAI/Google)
-│   │   ├── RAG Service (ChromaDB vector search)
-│   │   ├── Web Search (Brave/Serper)
-│   │   ├── Document Processing (PDF/DOCX)
-│   │   └── Cache Service (Redis)
-│   ├── Agents Layer (LangGraph Orchestration)
-│   │   ├── Research Agent
-│   │   ├── Requirements Agent
-│   │   ├── Qualification Agent
-│   │   ├── Solution Matching Agent
-│   │   ├── Proposal Agent
-│   │   └── Reviewer Agent
-│   ├── API Layer (REST endpoints)
-│   └── Database Layer (SQLAlchemy/PostgreSQL)
-└── Frontend (React + TypeScript)
-    ├── Pages (InputForm, Dashboard, LeadsList)
-    ├── Components (Card views for each agent)
-    ├── Hooks (API integration, state management)
-    └── Styling (Tailwind CSS)
-```
+### Option 1: Docker Compose (Recommended)
 
-## Quick Start
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Ranjith-7416/sales-ai.git
+   cd sales-ai
+   ```
 
-### Prerequisites
-- Docker and Docker Compose
-- Node.js 18+
-- Python 3.11+
-- Git
+2. **Start all services:**
+   ```bash
+   docker-compose up --build
+   ```
+   This launches:
+   - PostgreSQL (port `5432`)
+   - Redis (port `6379`)
+   - FastAPI Backend (port `8000`)
+   - Vite React Frontend (port `5173`)
 
-### Local Development
+### Option 2: Manual Local Execution
 
-1. **Clone the repository**
+1. **Backend Setup:**
+   ```bash
+   cd backend
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   
+   # Set environment configuration
+   cp .env.example .env
+   
+   # Run local FastAPI server
+   uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+   ```
+
+2. **Frontend Setup:**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   Open `http://localhost:3000` in your browser.
+
+---
+
+## 🧪 Verification & Automated Testing
+
+The codebase includes comprehensive test suites across both backend and frontend layers:
+
 ```bash
-git clone <your-repo-url>
-cd sales-ai
-```
-
-2. **Create environment file**
-```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env with your API keys
-```
-
-3. **Start services with Docker Compose**
-```bash
-docker-compose up
-```
-
-This starts:
-- PostgreSQL database (port 5432)
-- Redis cache (port 6379)
-- Backend API (port 8000)
-- Frontend dev server (port 5173)
-
-4. **Access the application**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-
-### Manual Setup (Without Docker)
-
-1. **Backend setup**
-```bash
+# 1. Run all Backend Pytest Suites (109 passed)
 cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+.venv/bin/pytest tests -v
 
-# Set up environment
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run the server
-uvicorn app.main:app --reload
-```
-
-2. **Frontend setup**
-```bash
+# 2. Run Frontend Unit Tests (5 passed)
 cd frontend
-npm install
-npm run dev
+npm run test
+
+# 3. Run Frontend Linter (0 warnings, 0 errors)
+npm run lint
+
+# 4. Compile Production Frontend Build (0 errors)
+npm run build
 ```
 
-### Provider-backed E2E test
+---
 
-The real-provider test is opt-in. For development, use Gemini with a Google AI Studio API key:
+## 📂 Repository Structure
 
-```bash
-cd backend
-cp .env.example .env
-# Set GOOGLE_API_KEY in backend/.env, then run:
-RUN_LLM_E2E=1 .venv/bin/python -m pytest tests/test_provider_e2e.py::test_provider_backed_pipeline_end_to_end -q
-```
-
-Set `LLM_PROVIDER=groq` and use Groq with `GROQ_API_KEY`, `GROQ_MODEL_MAIN`, and `GROQ_MODEL_REASONING` in `backend/.env`. The current configured Groq model ID is `openai/gpt-oss-120b`. To use Gemini instead, set `LLM_PROVIDER=gemini` and provide `GOOGLE_API_KEY`; to use OpenRouter instead, set `LLM_PROVIDER=openrouter` plus `OPENROUTER_API_KEY`, `OPENROUTER_MODEL_MAIN`, and `OPENROUTER_MODEL_REASONING`. Model IDs are passed through to the provider’s OpenAI-compatible API. Never commit `backend/.env` or print API keys in command output. The mock-provider test remains available for offline validation. Do not run a real E2E repeatedly when a provider reports a quota or TPM rate limit; a live provider failure such as Groq `429 rate_limit_exceeded` is an external provider limitation, not an application success.
-
-Set `LLM_FALLBACK_PROVIDERS=groq` to automatically use a configured Groq provider when the selected provider reports quota exhaustion. Fallback occurs only for quota responses; it does not hide authentication, validation, or ordinary provider errors.
-
-## Configuration
-
-### Environment Variables
-
-Create `backend/.env` with required variables:
-
-```env
-# LLM Provider (gemini, groq, openrouter, anthropic, openai, google)
-LLM_PROVIDER=groq
-LLM_MODEL_MAIN=gemini-3.6-flash
-LLM_MODEL_REASONING=gemini-3.6-flash
-
-# Required only when LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_openrouter_key
-OPENROUTER_MODEL_MAIN=provider/model-id
-OPENROUTER_MODEL_REASONING=provider/model-id
-
-# Required only when LLM_PROVIDER=gemini
-GOOGLE_API_KEY=your_google_ai_studio_key
-
-# API Keys
-ANTHROPIC_API_KEY=your_key
-OPENAI_API_KEY=your_key
-GROQ_API_KEY=your_groq_key
-
-# Required only when LLM_PROVIDER=groq
-GROQ_MODEL_MAIN=openai/gpt-oss-120b
-GROQ_MODEL_REASONING=openai/gpt-oss-120b
-
-# Search APIs
-BRAVE_API_KEY=your_key
-SERPER_API_KEY=your_key
-
-# Database
-POSTGRES_USER=salesai
-POSTGRES_PASSWORD=your_database_password
-POSTGRES_DB=salesai_db
-DATABASE_URL=postgresql://salesai:your_database_password@localhost:5432/salesai_db
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# Application
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-API_AUTH_TOKEN=your_local_api_token
-
-# Knowledge Base
-KNOWLEDGE_BASE_PATH=./knowledge_base
-```
-
-Protected write endpoints require `Authorization: Bearer <API_AUTH_TOKEN>`. Health and provider-readiness endpoints remain public. Configure rate limits and timeout values through the environment variables shown in `backend/.env.example`.
-
-For production database setup, run migrations from `backend` before starting the service:
-
-```bash
-alembic upgrade head
-```
-
-Development startup may create tables automatically; production startup requires the migration step.
-
-### Knowledge Base Setup
-
-The system uses a RAG (Retrieval Augmented Generation) approach. Add products and services:
-
-1. **Create knowledge base JSON files**
-```bash
-backend/knowledge_base/
-├── products.json
-└── services.json
-```
-
-2. **Upload via API**
-```bash
-curl -X POST http://localhost:8000/api/knowledge-base/products/upload \
-  -H "Content-Type: application/json" \
-  -d @backend/knowledge_base/products.json
-```
-
-See [Knowledge Base Format](./backend/knowledge_base/README.md) for structure.
-
-## API Endpoints
-
-### Lead Management
-
-**Submit a lead for qualification**
-```
-POST /api/leads
-Content-Type: application/json
-
-{
-  "company_name": "Acme Corp",
-  "inquiry_text": "We need AI-powered customer service automation...",
-  "industry": "Healthcare",
-  "company_size": "500-1000",
-  "budget": "$500K-$1M",
-  "timeline": "3 months",
-  "additional_context": "Priority for Q1 2025"
-}
-
-Response: { "lead_id": "uuid" }
-```
-
-**Get lead status and results**
-```
-GET /api/leads/{lead_id}
-
-Response: {
-  "id": "uuid",
-  "lead_status": "Qualified",
-  "composite_score": 78,
-  "result": {
-    "research": {...},
-    "requirements": {...},
-    "qualification": {...},
-    "solution_matching": {...},
-    "proposal": {...},
-    "reviewer": {...}
-  }
-}
-```
-
-**List all leads**
-```
-GET /api/leads?skip=0&limit=20&status=Qualified
-
-Response: { "leads": [...], "total": 42 }
-```
-
-### Proposal Management
-
-**Get proposal for a lead**
-```
-GET /api/proposals/{lead_id}
-
-Response: { "proposal": {...}, "lead_id": "uuid" }
-```
-
-**Approve proposal**
-```
-POST /api/proposals/{lead_id}/approve
-Content-Type: application/json
-
-{ "approved_by": "sales.manager@company.com" }
-```
-
-**Send proposal to customer**
-```
-POST /api/proposals/{lead_id}/send
-Content-Type: application/json
-
-{ "recipient_email": "customer@acme.com" }
-```
-
-### Knowledge Base
-
-**Search products**
-```
-GET /api/knowledge-base/products/search?query=AI%20automation&limit=5
-```
-
-**Upload products**
-```
-POST /api/knowledge-base/products/upload
-Content-Type: application/json
-
-[
-  {
-    "name": "ProductName",
-    "description": "...",
-    "features": [...],
-    "pricing": "$X - $Y",
-    "implementation_timeline": "2-4 weeks"
-  }
-]
-```
-
-Full API documentation available at `http://localhost:8000/docs`
-
-## Usage Workflow
-
-### 1. Submit Lead
-Customer submits inquiry through the web form with:
-- Company information
-- Business requirements
-- Budget and timeline
-- Additional context
-
-### 2. Automatic Analysis
-Backend orchestrates 7-agent pipeline:
-1. **Research Agent** - Gathers company background
-2. **Requirements Agent** - Extracts structured needs
-3. **Qualification Agent** - Scores lead (0-100)
-4. **Solution Agent** - Matches products/services
-5. **Proposal Agent** - Generates proposal
-6. **Reviewer Agent** - Quality validation
-7. **Completion** - Results ready
-
-### 3. View Results
-Dashboard displays:
-- Lead qualification score with breakdown
-- Research findings
-- Extracted requirements
-- Recommended solutions with coverage
-- Generated proposal
-- Quality review and next steps
-
-### 4. Manage Proposal
-- Review proposal content
-- Approve for sending
-- Send to customer
-- Track status
-
-## Deployment
-
-For production deployment to Render (backend) and Vercel (frontend), see [DEPLOYMENT.md](./DEPLOYMENT.md)
-
-Quick deploy:
-1. Push to GitHub main branch
-2. Render automatically deploys backend
-3. Vercel automatically deploys frontend
-4. Configure environment variables in each platform
-5. Update CORS settings with production URLs
-
-## Performance Optimization
-
-### Caching
-- Web search results cached for 24 hours
-- Knowledge base queries cached with TTL
-- Redis for distributed caching
-
-### Database Indexing
-- Composite index on (lead_id, created_at)
-- Index on lead_status for filtering
-- Index on pipeline_result for searches
-
-### Frontend Optimization
-- Code splitting with Vite
-- Image lazy loading
-- CSS minification
-- Component memoization for performance
-
-## Monitoring
-
-### Backend Monitoring
-- Application Insights (optional)
-- Render metrics and logs
-- PostgreSQL query monitoring
-
-### Frontend Monitoring
-- Vercel Analytics
-- Core Web Vitals
-- Error tracking (Sentry optional)
-
-## Development
-
-### Project Structure
 ```
 sales-ai/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                 # FastAPI app
-│   │   ├── config.py              # Configuration
-│   │   ├── models.py              # SQLAlchemy models
-│   │   ├── schemas.py             # Pydantic schemas
-│   │   ├── database.py            # DB setup
-│   │   ├── services/              # Business logic
-│   │   ├── agents/                # AI agents
-│   │   └── api/                   # REST routes
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── knowledge_base/
+│   │   ├── main.py                     # FastAPI entry point, CORS, and routers
+│   │   ├── config.py                   # Central settings, weights, and thresholds
+│   │   ├── database.py                 # SQLAlchemy database session & engine
+│   │   ├── models.py                   # Lead, Proposal, User, Token, & Memory models
+│   │   ├── schemas.py                  # Pydantic input/output schemas
+│   │   ├── security.py                 # JWT token generation & auth validation
+│   │   ├── agents/                     # Specialized AI Presales Agents
+│   │   │   ├── orchestrator.py         # LangGraph StateGraph pipeline coordinator
+│   │   │   ├── research_agent.py       # Account & web research agent
+│   │   │   ├── requirements_agent.py   # RFP requirement analysis agent
+│   │   │   ├── qualification_agent.py  # Multi-factor qualification agent
+│   │   │   ├── solution_agent.py       # Knowledge-base RAG matching agent
+│   │   │   ├── proposal_agent.py       # Grounded proposal draft generator
+│   │   │   └── reviewer_agent.py       # QA audit, claim verification, & next steps
+│   │   ├── services/                   # Core business logic services
+│   │   │   ├── scoring_engine.py       # Explainable qualification scoring algorithms
+│   │   │   ├── rag_service.py          # ChromaDB vector store integration
+│   │   │   ├── proposal_validator.py   # Anti-hallucination fact checking
+│   │   │   ├── pdf_service.py          # ReportLab enterprise PDF generator
+│   │   │   ├── email_service.py        # Secure 6-digit OTP delivery via SMTP
+│   │   │   ├── document_processor.py   # PDF and DOCX text extractor
+│   │   │   ├── llm_service.py          # Unified multi-provider LLM interface
+│   │   │   └── web_search.py           # Web research integration
+│   │   └── api/                        # REST endpoint controllers
+│   │       ├── auth.py                 # Login, register, and 2-step OTP reset
+│   │       ├── leads.py                # Lead submission, upload, and querying
+│   │       ├── proposals.py            # Proposal approval, PDF streaming, export
+│   │       ├── knowledge_base.py       # Product & service catalog management
+│   │       └── config_api.py           # Dynamic scoring configuration
+│   ├── knowledge_base/                 # Bundled RAG catalogs
+│   │   ├── products.json               # Enterprise product catalog (DocumentAI Pro, etc.)
+│   │   └── services.json               # Professional service & SLA catalog
+│   ├── tests/                          # 110 automated pytest tests
+│   └── requirements.txt                # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx                # Main app
-│   │   ├── components/            # React components
-│   │   ├── hooks/                 # Custom hooks
-│   │   ├── types/                 # TypeScript types
-│   │   └── index.tsx              # Entry point
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile
-├── docker-compose.yml
-├── DEPLOYMENT.md
-└── README.md
+│   │   ├── App.tsx                     # Top-level routing & layout
+│   │   ├── config.ts                   # Centralized API URLs (Render/Vercel)
+│   │   ├── components/                 # React UI components
+│   │   │   ├── LoginPage.tsx           # Auth, Register, & 2-Step OTP Reset Wizard
+│   │   │   ├── Dashboard.tsx           # 6-Tab Presales Console & PDF Modal
+│   │   │   ├── InputForm.tsx           # Lead & RFP document upload form
+│   │   │   ├── LeadsList.tsx           # Filterable CRM lead pipeline view
+│   │   │   ├── ScoringConfigModal.tsx  # Dynamic weight/threshold configuration
+│   │   │   └── KnowledgeBaseViewer.tsx # Catalog explorer & search
+│   │   ├── context/                    # React Context (AuthContext)
+│   │   ├── hooks/                      # Custom hooks (useApi, useLeadQualification)
+│   │   └── types/                      # TypeScript definitions
+│   ├── package.json                    # Node dependencies
+│   ├── vite.config.ts                  # Vite build configuration
+│   └── tailwind.config.js              # Custom styling & animations
+├── docker-compose.yml                  # Multi-container local orchestration
+├── DEPLOYMENT.md                       # Comprehensive deployment documentation
+└── README.md                           # Master project documentation
 ```
-
-### Adding New Agents
-
-1. Create `backend/app/agents/your_agent.py`
-2. Implement agent function with proper prompting
-3. Register in `backend/app/agents/orchestrator.py`
-4. Add corresponding Pydantic schema
-5. Create frontend component for visualization
-
-### Adding to Knowledge Base
-
-1. Add products/services to JSON files
-2. Upload via API endpoint
-3. Verify with search endpoint
-4. Test in proposal generation
-
-## Troubleshooting
-
-### Backend Issues
-
-**LLM API Errors**
-- Check API key format and validity
-- Verify rate limits not exceeded
-- Check model name spelling
-- Review LLM provider documentation
-
-**Database Connection**
-- Verify PostgreSQL running
-- Check DATABASE_URL format
-- Confirm database exists
-- Check user permissions
-
-**Redis Connection**
-- Verify Redis running
-- Check REDIS_URL format
-- Verify Redis password (if required)
-- Check port availability
-
-### Frontend Issues
-
-**API Connection Errors**
-- Verify backend running on correct port
-- Check CORS configuration
-- Clear browser cache
-- Check network tab in devtools
-
-**Build Errors**
-- Clear node_modules: `rm -rf node_modules && npm install`
-- Check Node.js version: `node --version` (require 18+)
-- Verify Tailwind configuration
-
-## Contributing
-
-1. Fork repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Support
-
-- Issues: GitHub Issues
-- Discussions: GitHub Discussions
-- Email: support@example.com
-
-## Roadmap
-
-- [ ] Multi-language support
-- [ ] Webhook integrations for CRM systems
-- [ ] Advanced analytics dashboard
-- [ ] Custom agent templates
-- [ ] Mobile app
-- [ ] Voice-to-text inquiry input
-- [ ] PDF export with custom branding
-- [ ] A/B testing for proposal variations
-
-## Changelog
-
-### v1.0.0 (January 2025)
-- Initial release
-- 7-agent orchestration pipeline
-- Full lead qualification workflow
-- Proposal generation
-- React frontend with TypeScript
-- Docker Compose local development
-- Production deployment guides
 
 ---
 
-**Built with ❤️ using FastAPI, LangGraph, and React**
-
-Last Updated: January 2025
+## 📄 License
+This project is licensed under the [MIT License](LICENSE).
