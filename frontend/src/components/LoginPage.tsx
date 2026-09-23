@@ -13,39 +13,16 @@ import {
   ShieldCheck,
   ArrowRight,
   User as UserIcon,
-  KeyRound,
 } from 'lucide-react';
 
 type AuthMode = 'login' | 'register' | 'reset';
 
-// Gated strictly to development builds. In production, Vite evaluates import.meta.env.DEV as false
-// and Rollup dead-code elimination strips this component and its text entirely from the output bundle.
-let DevOtpHelper: React.FC<{ otp: string; onAutoFill: (val: string) => void }> | null = null;
-if (import.meta.env.DEV) {
-  DevOtpHelper = ({ otp, onAutoFill }) => (
-    <div className="mt-1.5 flex items-center justify-between text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1.5 rounded-lg">
-      <span>Dev Code: <strong className="font-mono text-amber-200">{otp}</strong></span>
-      <button
-        type="button"
-        onClick={() => onAutoFill(otp)}
-        className="text-amber-400 underline hover:text-amber-300 font-semibold cursor-pointer"
-      >
-        Auto-fill
-      </button>
-    </div>
-  );
-}
-
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, register, requestPasswordResetOtp, resetPassword, isAuthenticated, loading: authLoading } = useAuth();
+  const { login, register, resetPassword, isAuthenticated, loading: authLoading, user } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
-  const [resetStep, setResetStep] = useState<'request' | 'verify'>('request');
-  const [otpCode, setOtpCode] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
 
   // Form fields
   const [name, setName] = useState('');
@@ -62,66 +39,29 @@ export const LoginPage: React.FC = () => {
 
   const destination = (location.state as any)?.from?.pathname || '/';
 
-  // If already logged in, redirect immediately
+  // If already logged in, redirect to workspace
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
       navigate(destination, { replace: true });
     }
   }, [isAuthenticated, authLoading, navigate, destination]);
 
-  // Resend cooldown timer
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const interval = setInterval(() => {
-      setResendCooldown((prev) => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [resendCooldown]);
-
   const handleModeSwitch = (newMode: AuthMode) => {
     setMode(newMode);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsExistingAccount(false);
+    setPassword('');
     setConfirmPassword('');
-    setOtpCode('');
-    setResetStep('request');
-    setDevOtpHint(null);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   };
 
-  // Real-time trimmed values
+  // Real-time sanitized values
   const cleanPassword = password.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim();
   const cleanConfirm = confirmPassword.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim();
-  const isMatch = cleanPassword.length > 0 && cleanPassword === cleanConfirm;
+  const isMatch = cleanPassword.length >= 8 && cleanPassword === cleanConfirm;
   const isMismatch = cleanConfirm.length > 0 && cleanPassword !== cleanConfirm;
-
-  const handleRequestOtp = async () => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
-      setErrorMessage('Please enter your work email address to receive a verification code.');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await requestPasswordResetOtp(cleanEmail);
-      setResetStep('verify');
-      setResendCooldown(30);
-      setSuccessMessage(res.message || `A 6-digit verification code was sent to ${cleanEmail}.`);
-      if (import.meta.env.DEV && res.dev_otp) {
-        setDevOtpHint(res.dev_otp);
-      }
-    } catch (err: any) {
-      const msg =
-        err.response?.data?.detail ||
-        err.message ||
-        'Failed to send verification code. Please check your email address.';
-      setErrorMessage(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,33 +69,61 @@ export const LoginPage: React.FC = () => {
     setSuccessMessage(null);
     setIsExistingAccount(false);
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || user?.email || '').trim().toLowerCase();
 
-    // If requesting OTP in reset mode step 1
-    if (mode === 'reset' && resetStep === 'request') {
-      await handleRequestOtp();
+    // 1. FORGOT PASSWORD / RESET MODE
+    if (mode === 'reset') {
+      if (!cleanEmail) {
+        setErrorMessage('Please enter your account email on the login screen before resetting your password.');
+        return;
+      }
+      if (cleanPassword.length < 8) {
+        setErrorMessage('New password must be at least 8 characters long.');
+        return;
+      }
+      if (cleanPassword !== cleanConfirm) {
+        setErrorMessage('New Password and Confirm New Password must match.');
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        await resetPassword(cleanEmail, cleanPassword);
+        setSuccessMessage('Password reset successfully! Please sign in with your new password.');
+        setPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setMode('login');
+        }, 1200);
+      } catch (err: any) {
+        const msg =
+          err.response?.data?.detail ||
+          err.message ||
+          'Failed to reset password. Please check your account email and try again.';
+        setErrorMessage(msg);
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
 
-    if (!cleanEmail) {
-      setErrorMessage('Please provide your work email.');
-      return;
-    }
-
+    // 2. REGISTER MODE
     if (mode === 'register') {
       const cleanName = name.trim();
       if (!cleanName) {
         setErrorMessage('Please enter your full name.');
         return;
       }
-      if (cleanPassword.length < 6) {
-        setErrorMessage('Password must be at least 6 characters long.');
+      if (!cleanEmail) {
+        setErrorMessage('Please provide your work email.');
+        return;
+      }
+      if (cleanPassword.length < 8) {
+        setErrorMessage('Password must be at least 8 characters long.');
         return;
       }
       if (cleanPassword !== cleanConfirm) {
-        setErrorMessage(
-          `Passwords do not match. ("Create Password" has ${cleanPassword.length} characters, "Confirm Password" has ${cleanConfirm.length} characters. Please check for spelling differences).`
-        );
+        setErrorMessage('Passwords do not match. Please verify your password confirmation.');
         return;
       }
 
@@ -178,45 +146,20 @@ export const LoginPage: React.FC = () => {
       } finally {
         setSubmitting(false);
       }
-    } else if (mode === 'reset' && resetStep === 'verify') {
-      const cleanOtp = otpCode.trim();
-      if (!cleanOtp || cleanOtp.length < 4) {
-        setErrorMessage('Please enter the 6-digit verification code sent to your email.');
-        return;
-      }
-      if (cleanPassword.length < 6) {
-        setErrorMessage('New password must be at least 6 characters long.');
-        return;
-      }
-      if (cleanPassword !== cleanConfirm) {
-        setErrorMessage(
-          `Passwords do not match (${cleanPassword.length} chars vs ${cleanConfirm.length} chars). Please re-enter.`
-        );
-        return;
-      }
+      return;
+    }
 
-      setSubmitting(true);
-      try {
-        await resetPassword(cleanEmail, cleanOtp, cleanPassword);
-        setSuccessMessage('Password verified and updated successfully! Entering workspace...');
-        setTimeout(() => {
-          navigate(destination, { replace: true });
-        }, 800);
-      } catch (err: any) {
-        const msg =
-          err.response?.data?.detail ||
-          err.message ||
-          'Failed to reset password. Please check your verification code.';
-        setErrorMessage(msg);
-      } finally {
-        setSubmitting(false);
+    // 3. LOGIN MODE
+    if (mode === 'login') {
+      if (!cleanEmail) {
+        setErrorMessage('Please provide your work email.');
+        return;
       }
-    } else {
-      // Login mode
       if (!cleanPassword) {
         setErrorMessage('Please enter your password.');
         return;
       }
+
       setSubmitting(true);
       try {
         await login(cleanEmail, cleanPassword);
@@ -227,7 +170,7 @@ export const LoginPage: React.FC = () => {
           err.message ||
           'Invalid email or password. Please try again.';
         if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
-          msg = 'Connection timed out. The backend service may be waking up from cold start; please try again.';
+          msg = 'Connection timed out. The backend service may be waking up; please try again.';
         }
         setErrorMessage(msg);
       } finally {
@@ -237,44 +180,81 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-10 px-4 sm:px-6 relative">
-      {/* Background Ambient Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="relative min-h-[85vh] flex items-center justify-center py-10 px-4 sm:px-6">
+      {/* Static Calm Water Background - Zero animation, strictly static CSS/SVG */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 bg-gradient-to-b from-[#030d1a] via-[#05182e] to-[#020b16]">
+        {/* Static calm water ambient glows */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-600/10 blur-[130px]" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[55vw] h-[55vw] rounded-full bg-blue-600/15 blur-[150px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vw] h-[40vw] rounded-full bg-teal-500/5 blur-[160px]" />
 
+        {/* Static Water Waves (Pure static SVG shapes) */}
+        <svg
+          className="absolute bottom-0 left-0 w-full h-[320px] text-cyan-950/30"
+          viewBox="0 0 1440 320"
+          fill="none"
+          preserveAspectRatio="none"
+        >
+          <path
+            fill="currentColor"
+            fillOpacity="0.4"
+            d="M0,192L48,197.3C96,203,192,213,288,202.7C384,192,480,160,576,165.3C672,171,768,213,864,224C960,235,1056,213,1152,192C1248,171,1344,149,1392,138.7L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
+          />
+          <path
+            fill="currentColor"
+            fillOpacity="0.7"
+            d="M0,256L48,245.3C96,235,192,213,288,218.7C384,224,480,256,576,256C672,256,768,224,864,208C960,192,1056,192,1152,202.7C1248,213,1344,235,1392,245.3L1440,256L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
+          />
+        </svg>
+      </div>
+
+      {/* Main Authentication Container */}
       <div className="max-w-md w-full relative z-10">
-        {/* Card */}
-        <div className="glass-panel border border-white/[0.12] bg-slate-900/90 rounded-3xl p-8 sm:p-9 shadow-2xl backdrop-blur-2xl space-y-6">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 p-[1px] shadow-lg shadow-indigo-500/30 mb-2">
-              <div className="w-full h-full bg-slate-950 rounded-2xl flex items-center justify-center">
-                <Sparkles size={24} className="text-cyan-400" />
-              </div>
-            </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight">
-              Welcome to <span className="bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Sales AI</span>
-            </h1>
-            <p className="text-xs text-slate-400">
-              {mode === 'login'
-                ? 'Sign in to access your enterprise deal intelligence workspace'
-                : mode === 'register'
-                ? 'Create an account to start qualifying leads and closing deals'
-                : resetStep === 'request'
-                ? 'Enter your work email to receive a secure 6-digit verification code'
-                : 'Enter your 6-digit verification code and choose a new password'}
-            </p>
-          </div>
+        {/* Modern Glassmorphism Card */}
+        <div className="bg-[#091b30]/85 backdrop-blur-2xl border border-cyan-500/25 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-cyan-950/60 space-y-6">
 
-          {/* Mode Tabs */}
-          {mode !== 'reset' ? (
-            <div className="p-1 bg-slate-950/80 border border-white/[0.08] rounded-2xl flex items-center gap-1">
+          {/* Header Section */}
+          {mode === 'reset' ? (
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600 p-[1px] shadow-lg shadow-cyan-500/25 mb-1">
+                <div className="w-full h-full bg-[#05162a] rounded-2xl flex items-center justify-center">
+                  <Lock size={22} className="text-cyan-400" />
+                </div>
+              </div>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">
+                Forgot your password?
+              </h1>
+              <p className="text-xs text-slate-300">
+                {email ? `Resetting password for ${email}` : 'Enter your new password below'}
+              </p>
+            </div>
+          ) : (
+            <div className="text-center space-y-2">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 via-sky-500 to-blue-600 p-[1px] shadow-lg shadow-cyan-500/25 mb-1">
+                <div className="w-full h-full bg-[#05162a] rounded-2xl flex items-center justify-center">
+                  <Sparkles size={24} className="text-cyan-300" />
+                </div>
+              </div>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">
+                Welcome to <span className="bg-gradient-to-r from-cyan-400 to-sky-400 bg-clip-text text-transparent">Sales AI</span>
+              </h1>
+              <p className="text-xs text-slate-300">
+                {mode === 'login'
+                  ? 'Sign in to access your enterprise deal intelligence workspace'
+                  : 'Create an account to start qualifying leads and closing deals'}
+              </p>
+            </div>
+          )}
+
+          {/* Mode Switch Tabs (Shown for Login / Register) */}
+          {mode !== 'reset' && (
+            <div className="p-1 bg-[#051426]/90 border border-cyan-500/20 rounded-2xl flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => handleModeSwitch('login')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   mode === 'login'
-                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-white shadow-md shadow-orange-500/30'
+                    ? 'bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 text-white shadow-md shadow-cyan-900/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
@@ -285,31 +265,18 @@ export const LoginPage: React.FC = () => {
                 onClick={() => handleModeSwitch('register')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                   mode === 'register'
-                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 text-white shadow-md shadow-orange-500/30'
+                    ? 'bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 text-white shadow-md shadow-cyan-900/30'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
                 }`}
               >
                 Create Account
               </button>
             </div>
-          ) : (
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                <KeyRound size={14} /> Password Reset {resetStep === 'verify' ? '• Step 2 of 2' : '• Step 1 of 2'}
-              </span>
-              <button
-                type="button"
-                onClick={() => handleModeSwitch('login')}
-                className="text-xs text-slate-400 hover:text-white transition cursor-pointer"
-              >
-                Back to Sign In
-              </button>
-            </div>
           )}
 
           {/* Feedback Notices */}
           {errorMessage && (
-            <div className="p-3 bg-rose-950/70 border border-rose-500/40 text-rose-200 rounded-xl text-xs space-y-2 animate-in fade-in">
+            <div className="p-3 bg-rose-950/70 border border-rose-500/40 text-rose-200 rounded-xl text-xs space-y-2">
               <div className="flex items-start gap-2.5">
                 <AlertCircle size={16} className="text-rose-400 shrink-0 mt-0.5" />
                 <div className="leading-snug">{errorMessage}</div>
@@ -319,7 +286,7 @@ export const LoginPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleModeSwitch('login')}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition cursor-pointer"
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow transition cursor-pointer"
                   >
                     Sign In with this email <ArrowRight size={13} />
                   </button>
@@ -329,136 +296,22 @@ export const LoginPage: React.FC = () => {
           )}
 
           {successMessage && (
-            <div className="p-3 bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
+            <div className="p-3 bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 rounded-xl text-xs flex items-center gap-2">
               <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
               <div>{successMessage}</div>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
+          {/* FORGOT PASSWORD FORM */}
+          {mode === 'reset' ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* New Password */}
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                  Full Name
+                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                  New Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <UserIcon size={15} />
-                  </div>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Alex Morgan"
-                    autoComplete="name"
-                    autoCapitalize="words"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    required={mode === 'register'}
-                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Email Field */}
-            {mode === 'reset' && resetStep === 'verify' ? (
-              <div className="p-3 bg-stone-900/80 border border-orange-500/20 rounded-xl flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-stone-300">
-                  <Mail size={14} className="text-orange-400 shrink-0" />
-                  <span className="font-mono text-white">{email}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResetStep('request');
-                    setErrorMessage(null);
-                    setSuccessMessage(null);
-                  }}
-                  className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
-                >
-                  Change Email
-                </button>
-              </div>
-            ) : (
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                  Work Email
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <Mail size={15} />
-                  </div>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@company.com"
-                    autoComplete="email"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    required
-                    className="w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* OTP Verification Code (Step 2 of reset mode) */}
-            {mode === 'reset' && resetStep === 'verify' && (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    6-Digit Verification Code
-                  </label>
-                  <span className="text-[11px] text-amber-400/90 font-medium">
-                    Check your email inbox
-                  </span>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-amber-400">
-                    <KeyRound size={15} />
-                  </div>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="123456"
-                    autoComplete="one-time-code"
-                    required
-                    className="w-full bg-stone-900/90 border border-orange-500/40 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-mono tracking-widest text-center text-white placeholder-stone-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
-                  />
-                </div>
-                {DevOtpHelper && devOtpHint && (
-                  <DevOtpHelper otp={devOtpHint} onAutoFill={setOtpCode} />
-                )}
-              </div>
-            )}
-
-            {/* Password Field (Shown in login, register, or verify step of reset) */}
-            {(mode === 'login' || mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    {mode === 'register' ? 'Create Password' : mode === 'reset' ? 'New Password' : 'Password'}
-                  </label>
-                  {mode === 'login' && (
-                    <button
-                      type="button"
-                      onClick={() => handleModeSwitch('reset')}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 transition cursor-pointer"
-                    >
-                      Forgot password?
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock size={15} />
                   </div>
                   <input
@@ -466,40 +319,40 @@ export const LoginPage: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    autoComplete={mode === 'register' || mode === 'reset' ? 'new-password' : 'current-password'}
+                    autoComplete="new-password"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
                     required
-                    className={`w-full bg-slate-800/80 border border-white/[0.1] rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition ${
+                    className={`w-full bg-[#061527]/90 border rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition ${
                       showPassword ? 'font-mono tracking-wider' : ''
+                    } ${
+                      cleanPassword.length > 0 && cleanPassword.length < 8
+                        ? 'border-amber-500/50 focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
+                        : 'border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-cyan-300 transition cursor-pointer"
                     title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
-                {(mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Must be at least 6 characters {password.length > 0 && `(${password.length} entered)`}
-                  </span>
-                )}
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Must be at least 8 characters {cleanPassword.length > 0 && `(${cleanPassword.length} entered)`}
+                </span>
               </div>
-            )}
 
-            {/* Confirm Password Field */}
-            {(mode === 'register' || (mode === 'reset' && resetStep === 'verify')) && (
+              {/* Confirm New Password */}
               <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-                  Confirm Password
+                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                  Confirm New Password
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Lock size={15} />
                   </div>
                   <input
@@ -512,28 +365,28 @@ export const LoginPage: React.FC = () => {
                     autoCorrect="off"
                     spellCheck={false}
                     required
-                    className={`w-full bg-slate-800/80 border rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition ${
+                    className={`w-full bg-[#061527]/90 border rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition ${
                       showConfirmPassword ? 'font-mono tracking-wider' : ''
                     } ${
                       isMatch
-                        ? 'border-emerald-500/50 focus:border-emerald-500'
+                        ? 'border-emerald-500/60 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400'
                         : isMismatch
-                        ? 'border-amber-500/50 focus:border-amber-500'
-                        : 'border-white/[0.1] focus:border-orange-500'
+                        ? 'border-amber-500/60 focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
+                        : 'border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-cyan-300 transition cursor-pointer"
                     title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
                   >
                     {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
 
-                {/* Real-time Match Indicator */}
-                {confirmPassword.length > 0 && (
+                {/* Match Status Indicator */}
+                {cleanConfirm.length > 0 && (
                   <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
                     {isMatch ? (
                       <span className="text-emerald-400 flex items-center gap-1 font-medium">
@@ -541,106 +394,253 @@ export const LoginPage: React.FC = () => {
                       </span>
                     ) : (
                       <span className="text-amber-400 flex items-center gap-1 font-medium">
-                        <AlertCircle size={13} />
-                        Passwords do not match ({cleanPassword.length} chars in Create vs {cleanConfirm.length} chars in Confirm)
+                        <AlertCircle size={13} /> Passwords do not match
                       </span>
                     )}
                   </div>
                 )}
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full mt-2 py-3 bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 hover:from-amber-400 hover:to-red-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 shadow-lg shadow-orange-500/25 tracking-wide"
-            >
-              {submitting ? (
-                <>
-                  <Loader size={16} className="animate-spin text-white" />
-                  {mode === 'register'
-                    ? 'Creating Account...'
-                    : mode === 'reset'
-                    ? resetStep === 'request'
-                      ? 'Sending Verification Code...'
-                      : 'Verifying & Updating...'
-                    : 'Authenticating...'}
-                </>
-              ) : (
-                <>
-                  {mode === 'register'
-                    ? 'Create Account & Sign In'
-                    : mode === 'reset'
-                    ? resetStep === 'request'
-                      ? 'Send Verification Code'
-                      : 'Verify Code & Reset Password'
-                    : 'Sign In to Workspace'}
-                  <ArrowRight size={15} />
-                </>
+              {/* Reset Password Button */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 shadow-lg shadow-cyan-900/40 tracking-wide"
+              >
+                {submitting ? (
+                  <>
+                    <Loader size={16} className="animate-spin text-white" />
+                    Updating Password...
+                  </>
+                ) : (
+                  'Reset Password'
+                )}
+              </button>
+
+              {/* Back to Login Action */}
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('login')}
+                className="w-full py-2.5 text-center text-xs font-semibold text-cyan-300 hover:text-cyan-200 transition cursor-pointer"
+              >
+                Back to Login
+              </button>
+            </form>
+          ) : (
+            /* LOGIN / REGISTER FORM */
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {mode === 'register' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <UserIcon size={15} />
+                    </div>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Alex Morgan"
+                      autoComplete="name"
+                      autoCapitalize="words"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      required={mode === 'register'}
+                      className="w-full bg-[#061527]/90 border border-cyan-500/30 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition"
+                    />
+                  </div>
+                </div>
               )}
-            </button>
 
-            {mode === 'reset' && resetStep === 'verify' && (
-              <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
-                <span>Didn't receive the email?</span>
-                <button
-                  type="button"
-                  disabled={submitting || resendCooldown > 0}
-                  onClick={handleRequestOtp}
-                  className="text-amber-400 hover:text-amber-300 disabled:text-slate-500 font-semibold cursor-pointer underline-offset-4 hover:underline transition"
-                >
-                  {resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : 'Resend Code'}
-                </button>
+              {/* Work Email */}
+              <div>
+                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                  Work Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail size={15} />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    className="w-full bg-[#061527]/90 border border-cyan-500/30 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition"
+                  />
+                </div>
               </div>
-            )}
-          </form>
 
-          {/* Mode Switch Footer */}
-          <div className="text-center pt-2">
-            {mode === 'login' ? (
-              <p className="text-xs text-slate-400">
-                Don't have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => handleModeSwitch('register')}
-                  className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
-                >
-                  Create one here
-                </button>
-              </p>
-            ) : mode === 'register' ? (
-              <p className="text-xs text-slate-400">
-                Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => handleModeSwitch('login')}
-                  className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
-                >
-                  Sign in here
-                </button>
-              </p>
-            ) : (
-              <p className="text-xs text-slate-400">
-                Remember your password?{' '}
-                <button
-                  type="button"
-                  onClick={() => handleModeSwitch('login')}
-                  className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
-                >
-                  Back to Sign In
-                </button>
-              </p>
-            )}
-          </div>
+              {/* Password */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-200">
+                    {mode === 'register' ? 'Create Password' : 'Password'}
+                  </label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => handleModeSwitch('reset')}
+                      className="text-[11px] text-cyan-400 hover:text-cyan-300 transition cursor-pointer"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Lock size={15} />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    className={`w-full bg-[#061527]/90 border border-cyan-500/30 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition ${
+                      showPassword ? 'font-mono tracking-wider' : ''
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-cyan-300 transition cursor-pointer"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+                {mode === 'register' && (
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Must be at least 8 characters {password.length > 0 && `(${password.length} entered)`}
+                  </span>
+                )}
+              </div>
+
+              {/* Confirm Password (Register mode) */}
+              {mode === 'register' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock size={15} />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      required
+                      className={`w-full bg-[#061527]/90 border rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition ${
+                        showConfirmPassword ? 'font-mono tracking-wider' : ''
+                      } ${
+                        isMatch
+                          ? 'border-emerald-500/60 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400'
+                          : isMismatch
+                          ? 'border-amber-500/60 focus:border-amber-400 focus:ring-1 focus:ring-amber-400'
+                          : 'border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-cyan-300 transition cursor-pointer"
+                      title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                  {cleanConfirm.length > 0 && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                      {isMatch ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-medium">
+                          <CheckCircle2 size={13} /> Passwords match
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 flex items-center gap-1 font-medium">
+                          <AlertCircle size={13} /> Passwords do not match
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-98 shadow-lg shadow-cyan-900/40 tracking-wide"
+              >
+                {submitting ? (
+                  <>
+                    <Loader size={16} className="animate-spin text-white" />
+                    {mode === 'register' ? 'Creating Account...' : 'Authenticating...'}
+                  </>
+                ) : (
+                  <>
+                    {mode === 'register' ? 'Create Account & Sign In' : 'Sign In to Workspace'}
+                    <ArrowRight size={15} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Mode Switch Footer (Login / Register) */}
+          {mode !== 'reset' && (
+            <div className="text-center pt-2">
+              {mode === 'login' ? (
+                <p className="text-xs text-slate-300">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('register')}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
+                  >
+                    Create one here
+                  </button>
+                </p>
+              ) : (
+                <p className="text-xs text-slate-300">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => handleModeSwitch('login')}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer underline-offset-4 hover:underline"
+                  >
+                    Sign in here
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Security Features Callout */}
-          <div className="pt-4 border-t border-white/[0.06] flex items-center justify-center gap-4 text-[11px] text-slate-400">
+          <div className="pt-4 border-t border-cyan-500/15 flex items-center justify-center gap-4 text-[11px] text-slate-400">
             <span className="flex items-center gap-1">
-              <ShieldCheck size={13} className="text-emerald-400" /> Bcrypt Hashed
+              <ShieldCheck size={13} className="text-cyan-400" /> Bcrypt Hashed
             </span>
             <span>•</span>
             <span className="flex items-center gap-1">
-              <ShieldCheck size={13} className="text-indigo-400" /> JWT Encrypted
+              <ShieldCheck size={13} className="text-sky-400" /> JWT Encrypted
             </span>
             <span>•</span>
             <span>PostgreSQL CRM</span>
@@ -652,5 +652,3 @@ export const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
-
-

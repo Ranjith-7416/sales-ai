@@ -8,7 +8,27 @@ from app.database import init_db
 @pytest.fixture(autouse=True)
 def setup_test_db():
     init_db()
+    from app.services.cache_service import get_cache_service
+    from app.database import SessionLocal
+    from app.models import User
+    cache = get_cache_service()
+    cache.in_memory_cache.clear()
+
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == "admin@salesai.com").delete()
+        db.commit()
+    finally:
+        db.close()
+
     yield
+
+    db = SessionLocal()
+    try:
+        db.query(User).filter(User.email == "admin@salesai.com").delete()
+        db.commit()
+    finally:
+        db.close()
 
 client = TestClient(app)
 
@@ -435,7 +455,113 @@ def test_reset_password_weak_password_rejected(monkeypatch):
         json={"email": email, "otp_code": otp_code, "new_password": "   123   "},
     )
     assert res_whitespace.status_code == 400
-    assert "at least 6 characters" in res_whitespace.json()["detail"]
+    assert "at least 8 characters" in res_whitespace.json()["detail"]
+
+
+def test_simplified_reset_password_success():
+    """Verify simplified reset-password without OTP resets password and enables login."""
+    import uuid
+    email = f"simplified_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Simplified User", "email": email, "password": "InitialPassword123!"},
+    )
+
+    # Simplified reset passing email and new password >= 8 characters (no OTP)
+    reset_res = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "new_password": "CalmWaterResetPass123!"},
+    )
+    assert reset_res.status_code == 200
+    data = reset_res.json()
+    assert "access_token" in data
+    assert data["user"]["email"] == email
+
+    # Verify old password no longer works
+    old_login = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "InitialPassword123!"},
+    )
+    assert old_login.status_code == 401
+
+    # Verify new password logs in successfully
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "CalmWaterResetPass123!"},
+    )
+    assert new_login.status_code == 200
+
+
+def test_simplified_reset_password_too_short():
+    """Verify passwords shorter than 8 characters are rejected."""
+    import uuid
+    email = f"short_{uuid.uuid4().hex[:8]}@example.com"
+    client.post(
+        "/api/auth/register",
+        json={"name": "Short Test", "email": email, "password": "ValidInitialPass123!"},
+    )
+
+    res = client.post(
+        "/api/auth/reset-password",
+        json={"email": email, "new_password": "short7!"},  # 7 characters
+    )
+    assert res.status_code in (400, 422)
+
+
+def test_simplified_reset_password_unauthenticated_no_email():
+    """Verify unauthenticated reset without email is rejected (Requirement 8)."""
+    res = client.post(
+        "/api/auth/reset-password",
+        json={"new_password": "SecurePassword123!"},
+    )
+    assert res.status_code == 400
+    assert "account email is required" in res.json()["detail"].lower()
+
+
+def test_simplified_reset_password_authenticated_bearer():
+    """Verify authenticated user can reset password using Bearer token without passing email."""
+    import uuid
+    email = f"bearer_reset_{uuid.uuid4().hex[:8]}@example.com"
+    reg_res = client.post(
+        "/api/auth/register",
+        json={"name": "Bearer User", "email": email, "password": "OriginalPass123!"},
+    )
+    token = reg_res.json()["access_token"]
+
+    # Reset with Bearer token
+    reset_res = client.post(
+        "/api/auth/reset-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"new_password": "BrandNewPassword123!"},
+    )
+    assert reset_res.status_code == 200
+
+    # Log in with new password
+    login_res = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "BrandNewPassword123!"},
+    )
+    assert login_res.status_code == 200
+
+
+def test_admin_account_reset_and_login():
+    """Verify admin account can reset password and subsequently log in with new password."""
+    new_admin_pass = "SuperSecretAdminWater2026!"
+    res = client.post(
+        "/api/auth/reset-password",
+        json={"email": "admin@salesai.com", "new_password": new_admin_pass},
+    )
+    assert res.status_code == 200
+    assert res.json()["user"]["email"] == "admin@salesai.com"
+
+    # Verify login with updated password
+    login_res = client.post(
+        "/api/auth/login",
+        json={"email": "admin@salesai.com", "password": new_admin_pass},
+    )
+    assert login_res.status_code == 200
+    assert login_res.json()["user"]["role"] == "admin"
+
 
 
 

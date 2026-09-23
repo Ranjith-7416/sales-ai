@@ -10,7 +10,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   requestPasswordResetOtp: (email: string) => Promise<{ success: boolean; message: string; email: string; dev_otp?: string }>;
-  resetPassword: (email: string, otpCode: string, password: string) => Promise<void>;
+  resetPassword: (email: string, password: string, otpCode?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -114,12 +114,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.data;
   }, []);
 
-  const resetPassword = useCallback(async (email: string, otpCode: string, password: string) => {
-    const res = await authClient.post<LoginResponse>('/auth/reset-password', {
-      email,
-      otp_code: otpCode,
+  const resetPassword = useCallback(async (email: string, password: string, otpCode?: string) => {
+    const payload: { email?: string; new_password: string; otp_code?: string } = {
       new_password: password,
-    });
+    };
+    if (email) payload.email = email;
+    if (otpCode) payload.otp_code = otpCode;
+
+    const res = await authClient.post<LoginResponse>('/auth/reset-password', payload);
 
     const { access_token, user: userData } = res.data;
     setToken(access_token);
