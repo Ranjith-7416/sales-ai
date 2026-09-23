@@ -94,7 +94,7 @@ export const LoginPage: React.FC = () => {
         setConfirmPassword('');
         setTimeout(() => {
           setMode('login');
-        }, 1200);
+        }, 2000);
       } catch (err: any) {
         const msg =
           err.response?.data?.detail ||
@@ -133,7 +133,7 @@ export const LoginPage: React.FC = () => {
         setSuccessMessage('Account created successfully! Entering workspace...');
         setTimeout(() => {
           navigate(destination, { replace: true });
-        }, 800);
+        }, 2000);
       } catch (err: any) {
         const msg =
           err.response?.data?.detail ||
@@ -220,7 +220,7 @@ export const LoginPage: React.FC = () => {
       <div className="max-w-md w-full relative z-10">
         {/* Modern Glassmorphism Card */}
         <div
-          className="bg-[#091b30]/90 backdrop-blur-md border border-cyan-500/25 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-cyan-950/60 space-y-6"
+          className="bg-[#091b30]/98 border border-cyan-500/25 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-cyan-950/60 space-y-6"
           style={{ transform: 'translateZ(0)' }}
         >
 

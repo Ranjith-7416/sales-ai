@@ -21,70 +21,25 @@ body {
    FIERY MAGMA & EMBER AMBIENT BACKGROUND
    ========================================================================= */
 
-@keyframes ember-drift {
-  0% {
-    background-position: 0px 0px, 0px 0px, 0px 0px;
-  }
-  100% {
-    background-position: 30px -700px, -40px -900px, 20px -500px;
-  }
-}
-
-.app-shell {
-  min-height: 100vh;
-  background-color: #070302;
-  background-image: 
-    /* Bottom Blazing Magma Core */
-    radial-gradient(ellipse 110% 70% at 50% 100%, rgba(220, 38, 38, 0.32) 0%, rgba(234, 88, 12, 0.22) 32%, rgba(245, 158, 11, 0.12) 58%, transparent 80%),
-    /* Left Rising Fire Surge */
-    radial-gradient(ellipse 70% 60% at 0% 35%, rgba(249, 115, 22, 0.22) 0%, rgba(185, 28, 28, 0.16) 38%, transparent 68%),
-    /* Right Warm Ember Flare */
-    radial-gradient(ellipse 65% 55% at 100% 30%, rgba(245, 158, 11, 0.20) 0%, rgba(220, 38, 38, 0.14) 38%, transparent 68%),
-    /* Top Molten Amber Crown */
-    radial-gradient(circle at 50% -10%, rgba(251, 146, 60, 0.14) 0%, rgba(185, 28, 28, 0.08) 45%, transparent 70%),
-    /* Center Hearth Glow */
-    radial-gradient(at 50% 50%, rgba(153, 27, 27, 0.14) 0px, rgba(234, 88, 12, 0.06) 45%, transparent 70%);
-  position: relative;
-  isolation: isolate;
-  transform: translateZ(0);
-}
-
-/* Fiery Ash & Heat Haze Mesh */
-.app-shell::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: 
-    linear-gradient(rgba(249, 115, 22, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(249, 115, 22, 0.035) 1px, transparent 1px);
-  background-size: 36px 36px;
-  pointer-events: none;
-  z-index: -1;
-  contain: strict;
-}
-
-/* Floating Burning Embers Effect - Hardware isolated layer */
+/* Static Ambient Embers Effect - Zero continuous repaint overhead */
 .fire-embers {
   position: fixed;
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1.5px 1.5px at 15% 90%, rgba(251, 191, 36, 0.85) 50%, transparent 100%),
-    radial-gradient(2px 2px at 35% 85%, rgba(249, 115, 22, 0.9) 50%, transparent 100%),
-    radial-gradient(1px 1px at 55% 95%, rgba(239, 68, 68, 0.85) 50%, transparent 100%),
-    radial-gradient(2px 2px at 75% 80%, rgba(245, 158, 11, 0.9) 50%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 88% 92%, rgba(251, 146, 60, 0.85) 50%, transparent 100%),
-    radial-gradient(2.5px 2.5px at 28% 70%, rgba(245, 158, 11, 0.75) 50%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 68% 65%, rgba(239, 68, 68, 0.75) 50%, transparent 100%),
-    radial-gradient(2px 2px at 48% 45%, rgba(251, 191, 36, 0.6) 50%, transparent 100%),
-    radial-gradient(1px 1px at 82% 40%, rgba(249, 115, 22, 0.65) 50%, transparent 100%);
+    radial-gradient(1.5px 1.5px at 15% 90%, rgba(251, 191, 36, 0.65) 50%, transparent 100%),
+    radial-gradient(2px 2px at 35% 85%, rgba(249, 115, 22, 0.7) 50%, transparent 100%),
+    radial-gradient(1px 1px at 55% 95%, rgba(239, 68, 68, 0.65) 50%, transparent 100%),
+    radial-gradient(2px 2px at 75% 80%, rgba(245, 158, 11, 0.7) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 92%, rgba(251, 146, 60, 0.65) 50%, transparent 100%),
+    radial-gradient(2.5px 2.5px at 28% 70%, rgba(245, 158, 11, 0.55) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 68% 65%, rgba(239, 68, 68, 0.55) 50%, transparent 100%),
+    radial-gradient(2px 2px at 48% 45%, rgba(251, 191, 36, 0.45) 50%, transparent 100%),
+    radial-gradient(1px 1px at 82% 40%, rgba(249, 115, 22, 0.5) 50%, transparent 100%);
   background-size: 340px 420px, 460px 520px, 290px 360px;
-  animation: ember-drift 26s linear infinite;
   z-index: 0;
-  opacity: 0.55;
-  contain: strict;
-  will-change: transform;
-  transform: translateZ(0);
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 /* =========================================================================
