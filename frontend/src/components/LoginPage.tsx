@@ -181,19 +181,27 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div className="relative min-h-[85vh] flex items-center justify-center py-10 px-4 sm:px-6">
-      {/* Static Calm Water Background - Zero animation, strictly static CSS/SVG */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 bg-gradient-to-b from-[#030d1a] via-[#05182e] to-[#020b16]">
-        {/* Static calm water ambient glows */}
-        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-600/10 blur-[130px]" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[55vw] h-[55vw] rounded-full bg-blue-600/15 blur-[150px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vw] h-[40vw] rounded-full bg-teal-500/5 blur-[160px]" />
-
+      {/* Static Calm Water Background - GPU-accelerated static CSS radial gradients, zero heavy blur filters */}
+      <div
+        className="fixed inset-0 pointer-events-none overflow-hidden z-0"
+        style={{
+          background: `
+            radial-gradient(circle at 12% 15%, rgba(8, 145, 178, 0.16) 0%, transparent 45%),
+            radial-gradient(circle at 88% 85%, rgba(37, 99, 235, 0.18) 0%, transparent 45%),
+            radial-gradient(circle at 50% 50%, rgba(20, 184, 166, 0.08) 0%, transparent 55%),
+            linear-gradient(to bottom, #030d1a, #05182e, #020b16)
+          `,
+          transform: 'translateZ(0)',
+          contain: 'strict',
+        }}
+      >
         {/* Static Water Waves (Pure static SVG shapes) */}
         <svg
           className="absolute bottom-0 left-0 w-full h-[320px] text-cyan-950/30"
           viewBox="0 0 1440 320"
           fill="none"
           preserveAspectRatio="none"
+          style={{ transform: 'translateZ(0)' }}
         >
           <path
             fill="currentColor"
@@ -211,7 +219,10 @@ export const LoginPage: React.FC = () => {
       {/* Main Authentication Container */}
       <div className="max-w-md w-full relative z-10">
         {/* Modern Glassmorphism Card */}
-        <div className="bg-[#091b30]/85 backdrop-blur-2xl border border-cyan-500/25 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-cyan-950/60 space-y-6">
+        <div
+          className="bg-[#091b30]/90 backdrop-blur-md border border-cyan-500/25 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-cyan-950/60 space-y-6"
+          style={{ transform: 'translateZ(0)' }}
+        >
 
           {/* Header Section */}
           {mode === 'reset' ? (

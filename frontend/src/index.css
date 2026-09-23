@@ -14,8 +14,25 @@ html, body, #root {
   height: 100%;
 }
 
+html {
+  /* Optimize cursor responsiveness and text rendering */
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
   margin: 0;
   background: #070302;
   color: #fff7ed;
+  cursor: default;
+}
+
+/* Ensure smooth pointer handling without layout thrashing */
+button, [role="button"], a, input, select, textarea, label {
+  touch-action: manipulation;
+}
+
+button:hover, a:hover, [role="button"]:hover {
+  cursor: pointer;
 }
