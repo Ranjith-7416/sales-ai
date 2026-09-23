@@ -74,7 +74,7 @@ export const LoginPage: React.FC = () => {
     // 1. FORGOT PASSWORD / RESET MODE
     if (mode === 'reset') {
       if (!cleanEmail) {
-        setErrorMessage('Please enter your account email on the login screen before resetting your password.');
+        setErrorMessage('Please enter your work email address.');
         return;
       }
       if (cleanPassword.length < 8) {
@@ -225,7 +225,7 @@ export const LoginPage: React.FC = () => {
                 Forgot your password?
               </h1>
               <p className="text-xs text-slate-300">
-                {email ? `Resetting password for ${email}` : 'Enter your new password below'}
+                Enter your work email and choose a new password
               </p>
             </div>
           ) : (
@@ -305,6 +305,30 @@ export const LoginPage: React.FC = () => {
           {/* FORGOT PASSWORD FORM */}
           {mode === 'reset' ? (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Work Email */}
+              <div>
+                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
+                  Work Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <Mail size={15} />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    required
+                    className="w-full bg-[#061527]/90 border border-cyan-500/30 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 transition"
+                  />
+                </div>
+              </div>
+
               {/* New Password */}
               <div>
                 <label className="text-xs font-semibold text-slate-200 block mb-1.5">

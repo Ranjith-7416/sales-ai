@@ -53,6 +53,7 @@ describe('LoginPage and Simplified Forgot Password Flow', () => {
     expect(screen.getByRole('heading', { name: /Forgot your password\?/i })).toBeInTheDocument();
 
     // Verify fields
+    expect(screen.getByText(/^Work Email$/i)).toBeInTheDocument();
     expect(screen.getByText(/^New Password$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Confirm New Password$/i)).toBeInTheDocument();
 
@@ -65,6 +66,30 @@ describe('LoginPage and Simplified Forgot Password Flow', () => {
     expect(screen.queryByText(/Auto-fill/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/6-Digit Verification Code/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Send Verification Code/i)).not.toBeInTheDocument();
+  });
+
+  it('allows user to enter email directly on the Forgot Password page and reset', async () => {
+    mockResetPassword.mockResolvedValueOnce(undefined);
+    renderComponent();
+
+    // Click Forgot password directly without entering email on login screen
+    fireEvent.click(screen.getByRole('button', { name: /Forgot password\?/i }));
+
+    // Fill email directly on forgot password screen
+    const emailField = screen.getByPlaceholderText('name@company.com');
+    fireEvent.change(emailField, { target: { value: 'direct.email@example.com' } });
+
+    // Fill matching 8+ char password
+    const inputs = screen.getAllByPlaceholderText('••••••••••••');
+    fireEvent.change(inputs[0], { target: { value: 'DirectResetPass2026!' } });
+    fireEvent.change(inputs[1], { target: { value: 'DirectResetPass2026!' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Reset Password$/i }));
+
+    await waitFor(() => {
+      expect(mockResetPassword).toHaveBeenCalledWith('direct.email@example.com', 'DirectResetPass2026!');
+    });
+    expect(screen.getByText(/Password reset successfully/i)).toBeInTheDocument();
   });
 
   it('toggles password visibility with eye icons', () => {
