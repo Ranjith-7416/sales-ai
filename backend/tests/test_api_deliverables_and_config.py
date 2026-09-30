@@ -86,6 +86,10 @@ def test_knowledge_base_catalog_and_search_endpoints(client):
     assert "results" in search_data
     assert len(search_data["results"]) > 0
 
+    assert client.get("/api/knowledge-base/search?query=document&top_k=0").status_code == 422
+    assert client.get("/api/knowledge-base/products?skip=-1").status_code == 422
+    assert client.get("/api/knowledge-base/services?limit=-1").status_code == 422
+
 
 def test_proposal_export_endpoint(client):
     """Verify GET /api/proposals/{lead_id}/export returns structured Markdown and HTML."""

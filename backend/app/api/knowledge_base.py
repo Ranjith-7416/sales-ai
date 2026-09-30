@@ -1,14 +1,11 @@
 """Knowledge Base API Routes"""
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
-from sqlalchemy.orm import Session
-from app.database import get_db
-from app.models import KnowledgeBaseEntry
-from app.services.rag_service import get_rag_service
-from app.services.cache_service import get_cache_service
-from app.security import rate_limit, require_auth
-from typing import List
-import logging
 import json
+import logging
+
+from app.security import rate_limit, require_auth
+from app.services.cache_service import get_cache_service
+from app.services.rag_service import get_rag_service
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +16,7 @@ router = APIRouter()
 async def search_knowledge_base(
     query: str,
     entry_type: str = "product",
-    top_k: int = 5,
+    top_k: int = Query(5, ge=1, le=50),
 ):
     """Search knowledge base with caching"""
     try:
@@ -55,8 +52,8 @@ async def search_knowledge_base(
 
 @router.get("/products")
 async def list_products(
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
 ):
     """List all products with Redis caching"""
     try:
@@ -87,8 +84,8 @@ async def list_products(
 
 @router.get("/services")
 async def list_services(
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
 ):
     """List all services with Redis caching"""
     try:

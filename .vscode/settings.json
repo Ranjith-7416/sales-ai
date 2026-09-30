@@ -1,0 +1,17 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/backend",
+    "${workspaceFolder}/backend/.venv/lib/python3.11/site-packages"
+  ],
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingTypeStubs": "none",
+    "reportMissingModuleSource": "none",
+    "reportMissingImports": "none"
+  },
+  "cSpell.words": [
+    "fastapi",
+    "chromadb",
+    "openrouter"
+  ]
+}
