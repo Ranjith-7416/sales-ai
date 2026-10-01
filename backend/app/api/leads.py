@@ -1,4 +1,30 @@
-"""Leads API Routes"""
+"""Leads API Routes - Lead submission, status polling, and agent pipeline triggering.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: FASTAPI ASYNC & BACKGROUND PIPELINE DESIGN
+================================================================================
+Q: Why use FastAPI BackgroundTasks for multi-agent workflows instead of synchronous execution?
+A:
+1. Preventing HTTP Request Timeouts & Worker Starvation:
+   Executing 5 LLM agents sequentially/in parallel takes 10–25 seconds. If handled
+   synchronously inside an HTTP request, the client connection stays open, risking
+   browser/gateway timeouts (e.g. Vercel/Cloudflare 30s limits) and exhausting ASGI workers.
+
+2. Immediate 202 Accepted Response:
+   The `POST /api/leads` endpoint immediately stores the lead in the database with
+   status `processing`, returns HTTP 200/202 with the `lead_id`, and delegates execution
+   to `BackgroundTasks`. The UI updates instantly and polls or streams progress updates.
+
+3. Resilience & Database Session Lifecycle:
+   Database sessions (`get_db`) are cleanly managed via FastAPI dependency injection.
+   Background tasks instantiate isolated `SessionLocal()` instances to avoid connection
+   leaks or cross-thread race conditions.
+
+4. Defense-in-Depth Security:
+   Endpoints enforce JWT token authentication (`require_auth`) and Redis-backed rate
+   limiting (`rate_limit`) to safeguard AI endpoints against denial-of-wallet attacks.
+================================================================================
+"""
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, Form, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import or_

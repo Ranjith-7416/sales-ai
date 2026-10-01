@@ -1,4 +1,31 @@
-"""RAG Service - Vector database and knowledge base retrieval"""
+"""RAG Service - Vector database and knowledge base retrieval.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: RAG (RETRIEVAL-AUGMENTED GENERATION) & GROUNDING
+================================================================================
+Q: How is RAG implemented in this system, and how do you prevent hallucinations?
+A:
+1. Dense Vector Embeddings:
+   Product and service catalog descriptions are converted into dense embeddings
+   using `sentence-transformers` ('all-MiniLM-L6-v2').
+
+2. ChromaDB Vector Store:
+   Catalog items are persisted and indexed in ChromaDB collections (`products` and
+   `services`). Cosine distance search retrieves the top-k most semantically relevant
+   solutions given customer inquiry text.
+
+3. Solution Grounding & Anti-Hallucination Guardrails:
+   The downstream Solution Agent and Reviewer Agent perform "Grounding Checks":
+   - Every claim in the generated proposal is verified against the retrieved catalog items.
+   - If an LLM attempts to promise a capability not present in the vector store
+     (e.g. real-time audio translation), the Grounding Validator flags it as ungrounded.
+
+4. Offline Resilience & Graceful Fallback:
+   If ChromaDB or the embedding model cannot be loaded (e.g. offline testing or
+   limited compute), the service falls back to deterministic keyword matching
+   so production APIs never return a 500 error.
+================================================================================
+"""
 from typing import List, Dict, Any, Optional
 try:
     import chromadb

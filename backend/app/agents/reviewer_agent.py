@@ -1,4 +1,26 @@
-"""Reviewer Agent - Final QA and validation"""
+"""Reviewer Agent - Final QA, validation, and proposal auditing.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: THE ACTOR-CRITIC MULTI-AGENT PATTERN
+================================================================================
+Q: What is the purpose of having a separate Reviewer Agent in this pipeline?
+A:
+1. Actor-Critic Architecture:
+   In generative AI, the generator ("Actor" / Proposal Agent) often suffers from
+   confirmation bias and over-optimism. The Reviewer Agent acts as an independent
+   "Critic" that audits the proposal before human delivery.
+
+2. Adversarial Compliance & Fact-Checking:
+   The Reviewer compares the generated proposal against:
+   - Grounded catalog capabilities (Did the proposal promise unsupported features?)
+   - Customer constraints (Does pricing align with customer budget and catalog rules?)
+   - Risk identification (Are there margin risks, technical blockers, or missing SLAs?)
+
+3. Quality Gate (Approval Readiness):
+   Outputs an explicit `approval_status` ("Approved", "Approved with Conditions",
+   or "Needs Revision") and generates clarifying follow-up questions for the sales rep.
+================================================================================
+"""
 from typing import Optional, Dict, Any
 from app.services.llm_service import get_llm_service
 from app.utils.json_utils import parse_json_response

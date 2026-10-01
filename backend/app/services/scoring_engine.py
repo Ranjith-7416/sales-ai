@@ -1,8 +1,39 @@
 """Authoritative Deterministic Lead Scoring and Qualification Engine.
 
-Guarantees 100% deterministic, explainable, and consistent qualification results.
-The LLM extracts structured facts and semantic evidence; this engine computes
-all numeric metrics and final qualification statuses.
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: DETERMINISTIC SCORING VS. LLM GENERATION
+================================================================================
+Q: Why use a deterministic Python scoring engine instead of letting the LLM
+   directly output the lead score and qualification decision?
+A:
+1. Eliminating Non-Deterministic Hallucinations:
+   LLM temperature and sampling make raw LLM scoring non-reproducible. The exact
+   same enterprise lead could score 82/100 on one run and 48/100 on the next.
+   In enterprise B2B sales, qualification must be 100% consistent and repeatable.
+
+2. Auditability, Explainability & Enterprise Governance:
+   Sales leaders and enterprise clients require transparency. With this engine,
+   every point awarded is traceable to a specific mathematical formula, verified
+   catalog capability, or confirmed customer attribute (e.g. +40 pts for 10,000+ volume).
+
+3. Clear Separation of Concerns:
+   - LLM Role: Qualitative semantic extraction (parsing messy natural language,
+     unstructured inquiries, and RFP documents into structured JSON parameters).
+   - Python Engine Role: Quantitative mathematical calculation (weighted linear
+     combination, risk penalties, bounds checking, threshold comparison).
+
+4. The 4 Weighted Dimensions:
+   Final Score = (Fit * 0.25) + (Readiness * 0.25) + (Opportunity * 0.30) + ((100 - Risk) * 0.20)
+   - Fit (25%): Coverage against product catalog (Document AI, Chat, Compliance).
+   - Readiness (25%): Budget availability and timeline urgency.
+   - Opportunity (30%): Enterprise document volume (10k+/mo) and employee headcount.
+   - Risk (20%): Missing critical requirements, ambiguity, or non-commercial spam.
+
+5. Threshold Boundaries:
+   - Score >= 75.0: Qualified (Fast-track to proposal generation)
+   - 50.0 <= Score < 75.0: Needs More Information (Flags specific follow-up questions)
+   - Score < 50.0: Low Priority (Nurture or disqualify non-commercial inquiries)
+================================================================================
 """
 from typing import Dict, Any, Optional, List, Tuple
 import re

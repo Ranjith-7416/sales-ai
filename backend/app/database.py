@@ -1,3 +1,28 @@
+"""Database Configuration - SQLAlchemy engine, connection pooling, and session management.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: DATABASE CONNECTION POOLING & SESSION LIFECYCLE
+================================================================================
+Q: How do you configure SQLAlchemy for high-concurrency production deployments?
+A:
+1. Environment-Adaptive Engine:
+   - Development/Testing: Uses SQLite with `connect_args={"check_same_thread": False}`
+     and `StaticPool` for fast, zero-dependency in-memory integration testing.
+   - Production: Uses PostgreSQL with connection pooling.
+
+2. Production Connection Pool Tuning:
+   - `pool_pre_ping=True`: Tests connections with a lightweight `SELECT 1` ping before
+     checking them out, preventing stale connections dropped by network firewalls.
+   - `pool_size` & `max_overflow`: Controls baseline connections and allows temporary bursts
+     under load spikes without running out of database server file descriptors.
+   - `pool_recycle`: Recycles connections periodically to avoid server-side timeouts.
+
+3. Safe Session Lifecycle (`get_db` generator):
+   Uses Python generator (`yield db`) wrapped in `try ... finally: db.close()`.
+   FastAPI's dependency injection automatically guarantees that the connection is
+   returned to the pool even if an unhandled exception is raised during request handling.
+================================================================================
+"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool

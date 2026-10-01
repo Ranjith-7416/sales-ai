@@ -1,4 +1,28 @@
-"""LLM Service - abstraction layer for multiple LLM providers"""
+"""LLM Service - Abstraction layer for multiple LLM providers.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: MULTI-PROVIDER LLM RESILIENCE & CIRCUIT BREAKING
+================================================================================
+Q: How do you handle LLM vendor lock-in, rate limits, downtime, and quota errors?
+A:
+1. Vendor-Agnostic Abstraction Layer:
+   The application does not couple directly to a single provider SDK. Instead,
+   it routes requests dynamically across Groq (Llama-3), OpenRouter, Anthropic (Claude),
+   OpenAI (GPT-4o), and Google Gemini via LangChain chat wrappers.
+
+2. Quota Circuit Breaker (Fail-Fast Pattern):
+   The service differentiates between:
+   - Transient Errors (503, 502, 504, temporary 429 token-per-minute spikes):
+     Retried with exponential backoff and jitter.
+   - Hard Quota Exhaustion (429 daily quota / zero balance depleted):
+     Immediately raises `ProviderQuotaError`, cutting off further pipeline calls
+     to avoid 30-second hanging timeouts and cascading billing failures.
+
+3. Testing Without External API Costs:
+   Includes `MockLLMProvider` so integration and regression test suites execute
+   100% offline in CI/CD without incurring API fees or flakiness.
+================================================================================
+"""
 from typing import Optional
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
