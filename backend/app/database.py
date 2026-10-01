@@ -1,27 +1,27 @@
-"""Database Configuration - SQLAlchemy engine, connection pooling, and session management.
+"""Database Configuration - SQLAlchemy engine and session management.
 
-================================================================================
+===============================================================================
 INTERVIEW ARCHITECTURE INSIGHT: DATABASE CONNECTION POOLING & SESSION LIFECYCLE
-================================================================================
+===============================================================================
 Q: How do you configure SQLAlchemy for high-concurrency production deployments?
 A:
 1. Environment-Adaptive Engine:
-   - Development/Testing: Uses SQLite with `connect_args={"check_same_thread": False}`
-     and `StaticPool` for fast, zero-dependency in-memory integration testing.
+   - Development/Testing: Uses SQLite with check_same_thread=False
+     and StaticPool for fast, zero-dependency in-memory integration testing.
    - Production: Uses PostgreSQL with connection pooling.
 
 2. Production Connection Pool Tuning:
-   - `pool_pre_ping=True`: Tests connections with a lightweight `SELECT 1` ping before
-     checking them out, preventing stale connections dropped by network firewalls.
-   - `pool_size` & `max_overflow`: Controls baseline connections and allows temporary bursts
-     under load spikes without running out of database server file descriptors.
-   - `pool_recycle`: Recycles connections periodically to avoid server-side timeouts.
+   - pool_pre_ping=True: Tests connections with a lightweight SELECT 1 ping,
+     preventing stale connections dropped by network firewalls.
+   - pool_size & max_overflow: Controls baseline connections and allows
+     temporary bursts under load spikes without exhausting file descriptors.
+   - pool_recycle: Recycles connections periodically to avoid timeouts.
 
-3. Safe Session Lifecycle (`get_db` generator):
-   Uses Python generator (`yield db`) wrapped in `try ... finally: db.close()`.
-   FastAPI's dependency injection automatically guarantees that the connection is
-   returned to the pool even if an unhandled exception is raised during request handling.
-================================================================================
+3. Safe Session Lifecycle (get_db generator):
+   Uses Python generator (yield db) wrapped in try ... finally: db.close().
+   FastAPI's dependency injection guarantees that the connection is
+   returned to the pool even if an unhandled exception occurs.
+===============================================================================
 """
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -50,7 +50,9 @@ else:
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
         pool_timeout=settings.DATABASE_POOL_TIMEOUT,
         pool_recycle=settings.DATABASE_POOL_RECYCLE,
-        connect_args={"connect_timeout": settings.DATABASE_CONNECT_TIMEOUT_SECONDS},
+        connect_args={
+            "connect_timeout": settings.DATABASE_CONNECT_TIMEOUT_SECONDS,
+        },
     )
 
 # Session factory
@@ -67,15 +69,20 @@ def get_db() -> Session:
 
 
 def _ensure_performance_indexes(bind_engine):
-    """Safely and non-destructively ensure performance indexes exist on tables."""
+    """Safely and non-destructively ensure performance indexes exist."""
     index_statements = [
-        "CREATE INDEX IF NOT EXISTS ix_leads_status_created_at ON leads (lead_status, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS ix_leads_composite_score ON leads (composite_score)",
+        "CREATE INDEX IF NOT EXISTS ix_leads_status_created_at "
+        "ON leads (lead_status, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_leads_composite_score "
+        "ON leads (composite_score)",
         "CREATE INDEX IF NOT EXISTS ix_leads_email ON leads (email)",
-        "CREATE INDEX IF NOT EXISTS ix_proposals_lead_created ON proposals (lead_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_proposals_lead_created "
+        "ON proposals (lead_id, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS ix_proposals_status ON proposals (status)",
-        "CREATE INDEX IF NOT EXISTS ix_pwd_tokens_email ON password_reset_tokens (email)",
-        "ALTER TABLE password_reset_tokens ALTER COLUMN otp_code TYPE VARCHAR(255)",
+        "CREATE INDEX IF NOT EXISTS ix_pwd_tokens_email "
+        "ON password_reset_tokens (email)",
+        "ALTER TABLE password_reset_tokens "
+        "ALTER COLUMN otp_code TYPE VARCHAR(255)",
     ]
     with bind_engine.connect() as conn:
         for stmt in index_statements:
@@ -96,7 +103,9 @@ def init_db():
         logger.info("Database tables and performance indexes initialized")
     except Exception as exc:
         if settings.ENVIRONMENT.lower() != "production":
-            logger.warning("PostgreSQL unavailable (%s); using SQLite for local development", exc)
+            logger.warning(
+                "PostgreSQL unavailable (%s); using SQLite for local dev", exc
+            )
             engine = create_engine(
                 "sqlite:///./salesai_dev.db",
                 echo=settings.DEBUG,
@@ -105,7 +114,7 @@ def init_db():
             SessionLocal.configure(bind=engine)
             Base.metadata.create_all(bind=engine)
             _ensure_performance_indexes(engine)
-            logger.info("Development SQLite database tables and performance indexes initialized")
+            logger.info("Development SQLite database initialized")
         else:
             raise
 
