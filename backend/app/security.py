@@ -1,4 +1,25 @@
-"""Authentication and request rate limiting dependencies."""
+"""Authentication and request rate limiting dependencies.
+
+===============================================================================
+INTERVIEW ARCHITECTURE INSIGHT: DEFENSE-IN-DEPTH SECURITY & TIMING ATTACKS
+===============================================================================
+Q: How do you secure public AI APIs against unauthorized access
+   and timing attacks?
+A:
+1. Constant-Time Authentication (`secrets.compare_digest`):
+   Standard string equality (`==`) leaks character comparison timing.
+   We use `secrets.compare_digest` to ensure constant-time execution,
+   neutralizing timing attacks on bearer tokens.
+
+2. Production Safeguard (Fail-Closed):
+   In production, if API authentication tokens are missing or misconfigured,
+   endpoints fail closed with HTTP 503 instead of exposing open endpoints.
+
+3. Multi-Tier Rate Limiting:
+   Protects expensive LLM endpoints against Denial-of-Wallet (DoW) attacks
+   using token-bucket limits via Redis, falling back to local sliding windows.
+===============================================================================
+"""
 import secrets
 import time
 from collections.abc import Callable

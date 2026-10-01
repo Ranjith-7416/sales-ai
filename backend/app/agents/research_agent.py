@@ -1,4 +1,25 @@
-"""Research Agent - Company background and market research"""
+"""Research Agent - Company background and market intelligence.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: EXTERNAL TOOL INTEGRATION & GRACEFUL DEGRADATION
+================================================================================
+Q: How does the Research Agent gather company context, and how do you prevent
+   failures if the search API is rate-limited or unavailable?
+A:
+1. Tool Augmentation:
+   Queries external web search services (DuckDuckGo / Serper) to fetch live company
+   context, industry vertical, and operational scale.
+
+2. Context Compression (`_compact_web_result`):
+   Web search returns bulky raw HTML/JSON. We strip unnecessary payloads and retain
+   only the top relevant title/URL/snippet lines to prevent bloating prompt tokens.
+
+3. Graceful Fallback (`_fallback_research`):
+   If search fails, times out, or runs offline, the agent falls back to semantic
+   heuristics inferred from the customer's inquiry text and domain keywords.
+   The pipeline never breaks due to external search failures.
+================================================================================
+"""
 from typing import Optional, Dict, Any
 from app.services.llm_service import get_llm_service
 from app.utils.json_utils import parse_json_response

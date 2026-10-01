@@ -1,4 +1,26 @@
-"""Requirements Agent - Extract and clarify customer requirements"""
+"""Requirements Agent - Extract and clarify customer requirements.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: UNSTRUCTURED DATA TO STRUCTURED SPECIFICATION
+================================================================================
+Q: How does the Requirements Agent turn vague customer inquiries into engineering specs?
+A:
+1. Taxonomy Separation:
+   Classifies raw customer input into:
+   - Functional Requirements (e.g. OCR extraction, REST API webhook)
+   - Technical Constraints (e.g. cloud vs on-prem, latency SLA < 500ms)
+   - Compliance Requirements (e.g. HIPAA, SOC2 Type II, GDPR)
+
+2. Enterprise Volume Parsing:
+   Detects scale markers (e.g. "10,000 PDF documents per month", "50,000 invoices")
+   which directly drive down-stream pricing tiers and qualification scoring.
+
+3. Active Missing Information Detection:
+   Identifies critical enterprise data points missing from the inquiry (e.g. budget,
+   expected user seats, timeline). If missing, the agent tags them so the sales rep
+   can ask targeted follow-up questions before drafting an expensive proposal.
+================================================================================
+"""
 from typing import Optional, Dict, Any
 from app.services.llm_service import get_llm_service
 from app.utils.json_utils import parse_json_response

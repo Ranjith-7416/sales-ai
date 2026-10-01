@@ -1,4 +1,25 @@
-"""Solution Matching Agent - Match requirements to product knowledge base"""
+"""Solution Matching Agent - Match requirements to product knowledge base.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: GROUNDING & CAPABILITY COVERAGE MATRIX
+================================================================================
+Q: How does the Solution Agent guarantee that recommended solutions actually exist?
+A:
+1. RAG-Powered Knowledge Retrieval:
+   Invokes `get_rag_service()` to query ChromaDB with extracted customer requirements,
+   retrieving verified product catalog items (e.g. DocumentAI Pro, Compliance Shield).
+
+2. Requirement Coverage Matrix:
+   Maps every customer requirement against the retrieved products:
+   - "Full" match (directly supported by catalog feature)
+   - "Partial" match (supported with minor customization)
+   - "Gap" (unsupported, requiring partner solution or explicit scope disclaimer)
+
+3. Grounding Validation Metric:
+   Calculates `verified_solution_count`. Solutions that do not match a verified catalog
+   item in ChromaDB are stripped out, eliminating hallucinated software offerings.
+================================================================================
+"""
 from typing import Optional, Dict, Any, List
 from app.services.llm_service import get_llm_service
 from app.services.rag_service import get_rag_service

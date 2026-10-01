@@ -1,4 +1,26 @@
-"""Proposal Generation Agent - Create professional draft proposals"""
+"""Proposal Generation Agent - Create professional, grounded commercial proposals.
+
+================================================================================
+INTERVIEW ARCHITECTURE INSIGHT: STRUCTURED COMMERCIAL PROPOSAL GENERATION
+================================================================================
+Q: How does the Proposal Agent generate comprehensive, multi-section proposals?
+A:
+1. Structured Synthesis:
+   Consumes verified outputs from all upstream agents (Requirements, Research, Solution)
+   to produce an enterprise-grade proposal structure:
+   - Executive Summary (tailored to customer's industry and pain points)
+   - Scope of Work & Deliverables
+   - Grounded Solution Architecture
+   - Transparent Pricing & Tier Structure (monthly recurring fee + one-time onboarding)
+   - Implementation Timeline & Milestones (e.g. 2–3 months rollout)
+   - SLA & Performance Guarantees (e.g. 99.9% uptime, < 500ms latency)
+
+2. Defensive Repair & Validation (`validate_proposal`):
+   Every generated proposal is inspected by `validate_proposal`. If key sections
+   are missing or malformed, a deterministic fallback/repair layer injects safe,
+   grounded defaults to guarantee the sales rep always receives a compliant document.
+================================================================================
+"""
 from typing import Optional, Dict, Any
 from app.services.llm_service import get_llm_service
 from app.services.proposal_validator import validate_proposal
